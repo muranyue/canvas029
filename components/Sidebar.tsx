@@ -1,0 +1,321 @@
+
+import React, { useState, useRef, useEffect, memo, useMemo } from 'react';
+import { Icons } from './Icons';
+import { NodeType, NodeData } from '../types';
+
+interface SidebarProps {
+  onAddNode: (type: NodeType) => void;
+  onSaveWorkflow: () => void;
+  onLoadWorkflow: () => void;
+  onNewWorkflow: () => void;
+  onImportAsset: () => void;
+  onOpenSettings: (tab: string) => void;
+  onUpdateCanvasBg: (color: string) => void;
+  nodes: NodeData[];
+  onPreviewMedia: (url: string, type: 'image' | 'video') => void;
+  isDark?: boolean;
+  isOpen?: boolean; // New prop for mobile responsiveness
+  onClose?: () => void; // New prop for closing on mobile
+}
+
+type MenuCategory = 'ADD' | 'WORKFLOW' | 'HISTORY' | 'ASSETS' | 'SETTINGS' | null;
+
+const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'image' | 'video', onClick: () => void }) => {
+    const stackCount = node.outputArtifacts?.length || 0;
+    
+    return (
+        <div 
+           className="relative aspect-square rounded-lg overflow-hidden border border-zinc-800 cursor-pointer group bg-black"
+           onClick={onClick}
+        >
+            {type === 'image' ? (
+                <img src={node.imageSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" decoding="async"/>
+            ) : (
+                <div className="w-full h-full relative bg-black">
+                   <video src={node.videoSrc} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" muted preload="metadata" />
+                   <div className="absolute inset-0 flex items-center justify-center">
+                       <Icons.Play size={16} className="text-white opacity-50 group-hover:opacity-100 drop-shadow-md"/>
+                   </div>
+                </div>
+            )}
+            
+            {stackCount > 1 && (
+                <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md text-white text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 border border-white/10 z-10 shadow-sm">
+                    <Icons.Layers size={8} className="text-cyan-400" />
+                    <span className="font-bold">{stackCount}</span>
+                </div>
+            )}
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
+                <div className="text-[9px] text-white truncate font-medium">{node.title}</div>
+                <div className="text-[8px] text-zinc-400 truncate">{node.resolution || '1024x1024'}</div>
+            </div>
+        </div>
+    );
+}, (prev, next) => {
+    return prev.type === next.type && 
+           prev.node.id === next.node.id && 
+           prev.node.imageSrc === next.node.imageSrc && 
+           prev.node.videoSrc === next.node.videoSrc &&
+           prev.node.title === next.node.title &&
+           (prev.node.outputArtifacts?.length || 0) === (next.node.outputArtifacts?.length || 0);
+});
+
+const Sidebar: React.FC<SidebarProps> = ({ 
+  onAddNode, 
+  onSaveWorkflow, 
+  onLoadWorkflow, 
+  onNewWorkflow,
+  onImportAsset,
+  onOpenSettings,
+  onUpdateCanvasBg,
+  nodes,
+  onPreviewMedia,
+  isDark = true,
+  isOpen = true,
+  onClose
+}) => {
+  const [activeMenu, setActiveMenu] = useState<MenuCategory>(null);
+  const [historyTab, setHistoryTab] = useState<'IMAGES' | 'VIDEOS'>('IMAGES');
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Deduplicate nodes for history display
+  const uniqueNodes = useMemo(() => {
+      const map = new Map<string, NodeData>();
+      nodes.forEach(n => {
+          if (!map.has(n.id)) map.set(n.id, n);
+      });
+      return Array.from(map.values());
+  }, [nodes]);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleMenu = (category: MenuCategory) => {
+    if (category === 'SETTINGS') {
+        setActiveMenu(null); // Close any open menu
+        onOpenSettings('API'); // Directly open modal
+        if (window.innerWidth < 768 && onClose) onClose();
+    } else {
+        setActiveMenu(prev => prev === category ? null : category);
+    }
+  };
+
+  const handleAction = (action: () => void) => {
+      action();
+      // On mobile, close sidebar after action if it's a simple action
+      if (window.innerWidth < 768 && onClose) {
+          onClose();
+      }
+  };
+
+  // Theme Classes
+  const sidebarBg = isDark ? 'bg-[#1A1D21]/95 border-zinc-700/50' : 'bg-white/95 border-gray-200';
+  const menuBg = isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200';
+  const itemHover = isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100';
+  const itemText = isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-900';
+  const itemActive = isDark ? 'bg-zinc-800 text-cyan-400' : 'bg-cyan-50 text-cyan-600';
+  const dividerColor = isDark ? 'bg-zinc-800' : 'bg-gray-200';
+  const titleColor = isDark ? 'text-gray-500 border-zinc-800' : 'text-gray-400 border-gray-100';
+  
+  const SidebarItem = ({ 
+    icon: Icon, 
+    category, 
+    tooltip 
+  }: { 
+    icon: any, 
+    category: MenuCategory, 
+    tooltip: string 
+  }) => (
+    <div 
+        className={`relative flex items-center justify-center w-10 h-10 mb-3 rounded-xl cursor-pointer transition-all duration-200 group
+          ${activeMenu === category ? itemActive : itemText + ' ' + itemHover}
+        `}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleMenu(category);
+        }}
+    >
+      <Icon size={20} />
+      {activeMenu !== category && (
+        <div className={`absolute left-full ml-3 px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border shadow-xl text-xs hidden md:block ${isDark ? 'bg-zinc-900 text-gray-200 border-zinc-700' : 'bg-white text-gray-800 border-gray-200'}`}>
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+
+  const SubMenuItem = ({ 
+    icon: Icon, 
+    label, 
+    onClick, 
+    desc,
+    active
+  }: { 
+    icon: any, 
+    label: string, 
+    onClick: () => void, 
+    desc?: string,
+    active?: boolean
+  }) => (
+    <div 
+      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors w-full group ${active ? (isDark ? 'bg-zinc-800/80' : 'bg-gray-100') : itemHover}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleAction(onClick);
+      }}
+    >
+      <div className={`w-8 h-8 flex items-center justify-center border rounded-lg shadow-sm shrink-0 transition-colors ${active ? 'text-cyan-400 border-cyan-500/30' : (isDark ? 'bg-zinc-800 border-zinc-700 text-gray-400 group-hover:text-cyan-400' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:text-cyan-600')}`}>
+        <Icon size={16} />
+      </div>
+      <div className="flex flex-col min-w-[120px]">
+        <span className={`text-sm font-medium ${active ? (isDark ? 'text-white' : 'text-black') : (isDark ? 'text-gray-300 group-hover:text-white' : 'text-gray-700 group-hover:text-black')}`}>{label}</span>
+        {desc && <span className="text-[10px] text-gray-500 group-hover:text-gray-400">{desc}</span>}
+      </div>
+      {active && <Icons.ChevronRight size={14} className="ml-auto text-cyan-500" />}
+    </div>
+  );
+
+  const renderHistoryContent = () => {
+    const imageNodes = uniqueNodes.filter(n => n.imageSrc && !n.isLoading && (n.type === NodeType.TEXT_TO_IMAGE || n.type === NodeType.ORIGINAL_IMAGE));
+    const videoNodes = uniqueNodes.filter(n => n.videoSrc && !n.isLoading && n.type === NodeType.TEXT_TO_VIDEO);
+
+    const items = historyTab === 'IMAGES' ? imageNodes : videoNodes;
+    const tabActive = isDark ? 'bg-zinc-700 text-white' : 'bg-white text-gray-900 shadow-sm border border-gray-200';
+    const tabInactive = isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700';
+
+    return (
+        <div className="w-full flex flex-col gap-3">
+             <div className={`flex rounded-lg p-1 border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-100 border-gray-200'}`}>
+                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'IMAGES' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('IMAGES')}>IMAGES</button>
+                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'VIDEOS' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('VIDEOS')}>VIDEOS</button>
+             </div>
+
+             <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1 content-start">
+                 {items.length === 0 && (
+                     <div className="col-span-2 text-center py-6 text-[10px] text-zinc-600">
+                         No generated {historyTab.toLowerCase()} yet.
+                     </div>
+                 )}
+                 {items.map(node => (
+                     <HistoryItem 
+                        key={node.id} 
+                        node={node} 
+                        type={historyTab === 'IMAGES' ? 'image' : 'video'} 
+                        onClick={() => {
+                            onPreviewMedia((historyTab === 'IMAGES' ? node.imageSrc : node.videoSrc) || '', historyTab === 'IMAGES' ? 'image' : 'video');
+                            if (window.innerWidth < 768 && onClose) onClose();
+                        }}
+                     />
+                 ))}
+             </div>
+        </div>
+    );
+  };
+
+  const renderSubMenu = () => {
+    if (!activeMenu || activeMenu === 'SETTINGS') return null;
+
+    let content = null;
+    let title = "";
+
+    switch (activeMenu) {
+      case 'ADD':
+        title = "Add Node";
+        content = (
+          <>
+            <SubMenuItem icon={Icons.Video} label="Text to Video" desc="Veo 3, Sora 2" onClick={() => onAddNode(NodeType.TEXT_TO_VIDEO)} />
+            <SubMenuItem icon={Icons.Image} label="Text to Image" desc="Gemini 3, Imagen 3" onClick={() => onAddNode(NodeType.TEXT_TO_IMAGE)} />
+            <SubMenuItem icon={Icons.FileText} label="Creative Desc" desc="Prompt Assistant" onClick={() => onAddNode(NodeType.CREATIVE_DESC)} />
+          </>
+        );
+        break;
+      case 'WORKFLOW':
+        title = "My Workflow";
+        content = (
+          <>
+            <SubMenuItem icon={Icons.FilePlus} label="New Workflow" onClick={onNewWorkflow} />
+            <SubMenuItem icon={Icons.FolderOpen} label="Open Workflow" onClick={onLoadWorkflow} />
+            <SubMenuItem icon={Icons.Save} label="Save Workflow" onClick={onSaveWorkflow} />
+          </>
+        );
+        break;
+      case 'HISTORY':
+        title = "History";
+        content = renderHistoryContent();
+        break;
+      case 'ASSETS':
+        title = "Assets";
+        content = (
+          <>
+            <SubMenuItem icon={Icons.Album} label="My Assets" onClick={() => {}} />
+            <SubMenuItem icon={Icons.Upload} label="Import Asset" onClick={onImportAsset} />
+          </>
+        );
+        break;
+    }
+
+    return (
+      <div className={`absolute left-[4.5rem] top-0 flex items-start h-full md:h-auto pointer-events-none md:pointer-events-auto ${window.innerWidth < 768 ? 'w-[calc(100vw-6rem)] z-[250]' : ''}`}>
+          <div className={`${menuBg} rounded-2xl p-3 flex flex-col gap-1 w-64 z-40 animate-in fade-in slide-in-from-left-2 shadow-2xl border pointer-events-auto`}>
+            <div className={`px-2 py-1 mb-2 border-b text-[10px] font-bold uppercase tracking-wider ${titleColor}`}>
+              {title}
+            </div>
+            {content}
+          </div>
+      </div>
+    );
+  };
+
+  // Mobile Backdrop
+  const mobileBackdrop = isOpen && (
+      <div 
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[190] md:hidden animate-in fade-in duration-200"
+        onClick={onClose}
+      />
+  );
+
+  return (
+    <>
+        {mobileBackdrop}
+        <div 
+            ref={menuRef} 
+            className={`fixed left-0 top-0 h-full md:left-4 md:top-1/2 md:h-auto md:-translate-y-1/2 z-[200] flex items-start transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        >
+        {/* Main Bar */}
+        <div className={`${sidebarBg} backdrop-blur-md shadow-2xl border-r md:border rounded-r-2xl md:rounded-2xl p-2 flex flex-col items-center h-full md:h-auto justify-center md:justify-start`}>
+            {/* Mobile Close Button */}
+            <div className="md:hidden mb-4">
+                 <button onClick={onClose} className={`p-2 rounded-full ${isDark ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-black'}`}>
+                     <Icons.X size={20} />
+                 </button>
+            </div>
+
+            <div className={`w-8 h-1 rounded-full mb-4 hidden md:block ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
+            
+            <SidebarItem icon={Icons.Plus} category="ADD" tooltip="Add Node" />
+            <div className={`w-full h-px my-2 ${dividerColor}`} />
+            <SidebarItem icon={Icons.Folder} category="WORKFLOW" tooltip="Workflow" />
+            <SidebarItem icon={Icons.Clock} category="HISTORY" tooltip="History" />
+            <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" />
+            <div className={`w-full h-px my-2 ${dividerColor}`} />
+            <SidebarItem icon={Icons.Settings} category="SETTINGS" tooltip="Settings" />
+        </div>
+
+        <div className="relative h-full flex items-center">
+            {renderSubMenu()}
+        </div>
+        </div>
+    </>
+  );
+};
+
+export default Sidebar;
