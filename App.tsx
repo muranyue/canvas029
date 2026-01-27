@@ -925,15 +925,34 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-      if (e.touches.length === 1 && dragMode === 'PAN') {
-          const touch = e.touches[0];
-          const dx = touch.clientX - dragStartRef.current.x;
-          const dy = touch.clientY - dragStartRef.current.y;
-          setTransform({
-              ...initialTransformRef.current,
-              x: initialTransformRef.current.x + dx,
-              y: initialTransformRef.current.y + dy
-          });
+      if (e.touches.length === 1) {
+          if (dragMode === 'PAN') {
+              const touch = e.touches[0];
+              const dx = touch.clientX - dragStartRef.current.x;
+              const dy = touch.clientY - dragStartRef.current.y;
+              setTransform({
+                  ...initialTransformRef.current,
+                  x: initialTransformRef.current.x + dx,
+                  y: initialTransformRef.current.y + dy
+              });
+          } else if (dragMode === 'DRAG_NODE') {
+              const touch = e.touches[0];
+              const dx = (touch.clientX - dragStartRef.current.x) / transform.k;
+              const dy = (touch.clientY - dragStartRef.current.y) / transform.k;
+              const movingNodeIds = draggingNodesRef.current;
+
+              setNodes(prev => prev.map(n => { 
+                  if (movingNodeIds.has(n.id)) { 
+                      const initial = initialNodePositionsRef.current.find(init => init.id === n.id); 
+                      if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy }; 
+                  } 
+                  return n; 
+              }));
+          } else if (dragMode === 'CONNECT') {
+               const touch = e.touches[0];
+               const worldPos = screenToWorld(touch.clientX, touch.clientY);
+               setTempConnection(worldPos);
+          }
       } else if (e.touches.length === 2 && touchStartRef.current) {
           const t1 = e.touches[0];
           const t2 = e.touches[1];
@@ -944,15 +963,7 @@ const CanvasWithSidebar: React.FC = () => {
               let newK = initialTransformRef.current.k * scale;
               newK = Math.min(Math.max(0.4, newK), 2.5);
 
-              // Calculate new position to keep the center point stable
-              // P_new = P_old * scale + T_new
-              // We want P_screen to stay at touchStartRef.current.center
-              // world_center = (center - T_old) / K_old
-              // center = world_center * K_new + T_new
-              // T_new = center - world_center * K_new
-              
               const rect = containerRef.current!.getBoundingClientRect();
-              // Adjust centers relative to container
               const cx = touchStartRef.current.centerX - rect.left;
               const cy = touchStartRef.current.centerY - rect.top;
 
@@ -967,9 +978,40 @@ const CanvasWithSidebar: React.FC = () => {
       }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent) => {
+      if (dragMode === 'CONNECT') {
+          // Attempt to find drop target for connection
+          const touch = e.changedTouches[0];
+          const worldPos = screenToWorld(touch.clientX, touch.clientY);
+          
+          // Find target node geometrically
+          const targetNode = nodes.find(n => 
+              n.id !== connectionStartRef.current?.nodeId && 
+              n.type !== NodeType.GROUP && 
+              n.type !== NodeType.ORIGINAL_IMAGE && // Cannot connect TO original image usually (it is source)
+              worldPos.x >= n.x && worldPos.x <= n.x + n.width &&
+              worldPos.y >= n.y && worldPos.y <= n.y + n.height
+          );
+          
+          if (targetNode) {
+              createConnection(connectionStartRef.current!.nodeId, targetNode.id);
+          } else if (connectionStartRef.current?.type === 'source') {
+               setQuickAddMenu({ 
+                   sourceId: connectionStartRef.current.nodeId, 
+                   x: touch.clientX, 
+                   y: touch.clientY, 
+                   worldX: worldPos.x, 
+                   worldY: worldPos.y 
+               });
+          }
+      }
+
       setDragMode('NONE');
       touchStartRef.current = null;
+      setTempConnection(null);
+      connectionStartRef.current = null;
+      setSuggestedNodes([]);
+      draggingNodesRef.current.clear();
   };
 
   const handleNavigate = useCallback((x: number, y: number) => {
@@ -993,6 +1035,90 @@ const CanvasWithSidebar: React.FC = () => {
         dragStartRef.current = { x: e.clientX, y: e.clientY };
         setSelectionBox({ x: 0, y: 0, w: 0, h: 0 }); 
         if (!e.shiftKey) setSelectedNodeIds(new Set());
+    }
+  };
+
+  const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
+    e.stopPropagation();
+    if (contextMenu) setContextMenu(null);
+    if (quickAddMenu) setQuickAddMenu(null);
+    if (selectedConnectionId) setSelectedConnectionId(null);
+    if (showColorPicker) setShowColorPicker(false);
+
+    if (e.touches.length === 1) {
+        setDragMode('DRAG_NODE');
+        const touch = e.touches[0];
+        dragStartRef.current = { x: touch.clientX, y: touch.clientY };
+        
+        // 1. Calculate Selection
+        const isAlreadySelected = selectedNodeIds.has(id);
+        let newSelection = new Set(selectedNodeIds);
+        
+        // Mobile: tap selects, tap another deselects previous (single select mostly, or additive?)
+        // Let's mimic single select default, unless multiselect mode (future). 
+        // For simplicity: tap always selects.
+        if (!isAlreadySelected) { 
+            newSelection.clear(); 
+            newSelection.add(id); 
+        }
+        setSelectedNodeIds(newSelection);
+        
+        // 2. Determine Nodes to Drag (Same logic as Mouse)
+        const nodesToDrag = new Set(newSelection);
+        const groupIds = Array.from(newSelection).filter(nid => nodes.find(n => n.id === nid)?.type === NodeType.GROUP);
+        
+        if (groupIds.length > 0) {
+            const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
+            nodes.forEach(n => {
+                if (nodesToDrag.has(n.id) || n.type === NodeType.GROUP) return; 
+                for (const gid of groupIds) {
+                    const group = nodes.find(g => g.id === gid);
+                    if (group) {
+                        const isInside = n.x >= group.x && n.x + n.width <= group.x + group.width && 
+                                         n.y >= group.y && n.y + n.height <= group.y + group.height;
+                        const groupIdx = idToIndex.get(gid)!;
+                        const nodeIdx = idToIndex.get(n.id)!;
+                        const isOnTop = nodeIdx > groupIdx;
+                        if (isInside && isOnTop) {
+                            nodesToDrag.add(n.id);
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+        draggingNodesRef.current = nodesToDrag;
+
+        // 3. Reorder DOM
+        setNodes(prev => {
+            const movingNodes = prev.filter(n => nodesToDrag.has(n.id));
+            const others = prev.filter(n => !nodesToDrag.has(n.id));
+            movingNodes.sort((a, b) => {
+                if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
+                if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
+                return 0;
+            });
+            return [...others, ...movingNodes];
+        });
+
+        if (newSelection.size === 1) {
+            const node = nodes.find(n => n.id === id);
+            if (node && node.type === NodeType.GROUP && node.color) {
+                setNextGroupColor(node.color);
+            }
+        }
+
+        initialNodePositionsRef.current = nodes.map(n => ({ id: n.id, x: n.x, y: n.y }));
+    }
+  };
+
+  const handleConnectTouchStart = (e: React.TouchEvent, nodeId: string, type: 'source' | 'target') => {
+    e.stopPropagation();
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        connectionStartRef.current = { nodeId, type };
+        setDragMode('CONNECT');
+        setTempConnection(screenToWorld(touch.clientX, touch.clientY));
     }
   };
 
@@ -1440,8 +1566,10 @@ const CanvasWithSidebar: React.FC = () => {
                         data={node}
                         selected={selectedNodeIds.has(node.id)}
                         onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                        onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
                         onContextMenu={(e) => handleNodeContextMenu(e, node.id, node.type)}
                         onConnectStart={(e, type) => handleConnectStart(e, node.id, type)}
+                        onConnectTouchStart={(e, type) => handleConnectTouchStart(e, node.id, type)}
                         onPortMouseUp={handlePortMouseUp}
                         onResizeStart={(e, direction) => handleResizeStart(e, node.id, direction)}
                         scale={transform.k}

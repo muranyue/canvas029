@@ -10,13 +10,17 @@ interface BaseNodeProps {
   onConnectStart: (e: React.MouseEvent, type: 'source' | 'target') => void;
   onPortMouseUp?: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
   onResizeStart?: (e: React.MouseEvent, direction: string) => void;
+  // Touch Events
+  onTouchStart?: (e: React.TouchEvent) => void;
+  onConnectTouchStart?: (e: React.TouchEvent, type: 'source' | 'target') => void;
   children: React.ReactNode;
   scale: number;
   isDark?: boolean;
 }
 
 const BaseNode: React.FC<BaseNodeProps> = ({ 
-  data, selected, onMouseDown, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, isDark = true
+  data, selected, onMouseDown, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, 
+  onTouchStart, onConnectTouchStart, isDark = true
 }) => {
   
   const portBg = isDark ? 'bg-[#0B0C0E] border-zinc-500' : 'bg-white border-gray-400';
@@ -55,6 +59,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         pointerEvents: isGroup && !selected ? 'auto' : 'auto'
       }}
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart} // Mobile Drag
       onContextMenu={onContextMenu}
     >
       {/* Selection Border - Groups handle their own selection border in GroupNode to encompass header */}
@@ -74,6 +79,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
               className={`absolute w-4 h-4 rounded-full border -left-2 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-crosshair hover:scale-125 transition-transform z-50 shadow-sm ${portBg}`}
               onMouseDown={(e) => e.stopPropagation()} // Prevent node drag
               onMouseUp={(e) => onPortMouseUp && onPortMouseUp(e, data.id, 'target')} // Handle drop
+              // Mobile: No separate touchstart needed for input port usually, drop is handled by element detection or geometry
             >
                 <span className={`text-[10px] leading-none select-none relative -top-[0.5px] ${portText}`}>+</span>
                 <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>
@@ -85,6 +91,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
             <div 
                 className={`absolute w-4 h-4 rounded-full border -right-2 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-crosshair hover:scale-125 transition-transform z-50 shadow-sm ${portBg}`}
                 onMouseDown={(e) => onConnectStart(e, 'source')}
+                onTouchStart={(e) => onConnectTouchStart && onConnectTouchStart(e, 'source')} // Mobile Connect
             >
                     <span className={`text-[10px] leading-none select-none relative -top-[0.5px] ${portText}`}>+</span>
                     <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>
