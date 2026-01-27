@@ -15,18 +15,20 @@ interface BaseNodeProps {
   isDark?: boolean;
 }
 
+// Helper to convert hex to rgba with alpha
 const hexToRgba = (hex: string, alpha: number) => {
-    let c: any;
-    if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
-        c= hex.substring(1).split('');
-        if(c.length== 3){
-            c= [c[0], c[0], c[1], c[1], c[2], c[2]];
-        }
-        c= '0x'+c.join('');
-        return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
+    let r = 0, g = 0, b = 0;
+    if (hex.length === 4) {
+        r = parseInt("0x" + hex[1] + hex[1]);
+        g = parseInt("0x" + hex[2] + hex[2]);
+        b = parseInt("0x" + hex[3] + hex[3]);
+    } else if (hex.length === 7) {
+        r = parseInt("0x" + hex[1] + hex[2]);
+        g = parseInt("0x" + hex[3] + hex[4]);
+        b = parseInt("0x" + hex[5] + hex[6]);
     }
-    return hex;
-}
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
 
 const BaseNode: React.FC<BaseNodeProps> = ({ 
   data, selected, onMouseDown, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, isDark = true
@@ -47,12 +49,10 @@ const BaseNode: React.FC<BaseNodeProps> = ({
       zIndex = 10; 
   }
 
-  // Group Opacity Logic
-  // Using a low opacity for dark mode to create a "glassy" tint effect with the light Morandi colors.
-  const opacity = isDark ? 0.15 : 0.5;
-
+  // Apply Group visual styles directly on BaseNode to ensure updates render immediately.
+  // We use hexToRgba to make the user-selected solid color transparent (20% opacity).
   const groupStyle: React.CSSProperties = isGroup ? {
-      backgroundColor: data.color ? hexToRgba(data.color, opacity) : (isDark ? 'rgba(39, 39, 42, 0.2)' : 'rgba(228, 228, 231, 0.5)'),
+      backgroundColor: data.color ? hexToRgba(data.color, 0.2) : (isDark ? 'rgba(39, 39, 42, 0.5)' : 'rgba(228, 228, 231, 0.5)'),
   } : {};
 
   return (

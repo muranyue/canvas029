@@ -14,8 +14,6 @@ interface SidebarProps {
   nodes: NodeData[];
   onPreviewMedia: (url: string, type: 'image' | 'video') => void;
   isDark?: boolean;
-  isOpen?: boolean; // New prop for mobile responsiveness
-  onClose?: () => void; // New prop for closing on mobile
 }
 
 type MenuCategory = 'ADD' | 'WORKFLOW' | 'HISTORY' | 'ASSETS' | 'SETTINGS' | null;
@@ -71,9 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onUpdateCanvasBg,
   nodes,
   onPreviewMedia,
-  isDark = true,
-  isOpen = true,
-  onClose
+  isDark = true
 }) => {
   const [activeMenu, setActiveMenu] = useState<MenuCategory>(null);
   const [historyTab, setHistoryTab] = useState<'IMAGES' | 'VIDEOS'>('IMAGES');
@@ -103,22 +99,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (category === 'SETTINGS') {
         setActiveMenu(null); // Close any open menu
         onOpenSettings('API'); // Directly open modal
-        if (window.innerWidth < 768 && onClose) onClose();
     } else {
         setActiveMenu(prev => prev === category ? null : category);
     }
   };
 
-  const handleAction = (action: () => void) => {
-      action();
-      // On mobile, close sidebar after action if it's a simple action
-      if (window.innerWidth < 768 && onClose) {
-          onClose();
-      }
-  };
-
   // Theme Classes
-  const sidebarBg = isDark ? 'bg-[#1A1D21]/95 border-zinc-700/50' : 'bg-white/95 border-gray-200';
+  const sidebarBg = isDark ? 'bg-[#1A1D21]/90 border-zinc-700/50' : 'bg-white/90 border-gray-200';
   const menuBg = isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200';
   const itemHover = isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100';
   const itemText = isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-900';
@@ -136,7 +123,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     tooltip: string 
   }) => (
     <div 
-        className={`relative flex items-center justify-center w-10 h-10 mb-3 rounded-xl cursor-pointer transition-all duration-200 group
+        className={`relative flex items-center justify-center w-10 h-10 mb-0 md:mb-3 rounded-xl cursor-pointer transition-all duration-200 group
           ${activeMenu === category ? itemActive : itemText + ' ' + itemHover}
         `}
         onClick={(e) => {
@@ -146,7 +133,22 @@ const Sidebar: React.FC<SidebarProps> = ({
     >
       <Icon size={20} />
       {activeMenu !== category && (
-        <div className={`absolute left-full ml-3 px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border shadow-xl text-xs hidden md:block ${isDark ? 'bg-zinc-900 text-gray-200 border-zinc-700' : 'bg-white text-gray-800 border-gray-200'}`}>
+        // Tooltip: Completely separated logic for desktop vs mobile
+        <div className={`
+            absolute 
+            hidden md:block md:left-full md:ml-3 md:top-1/2 md:-translate-y-1/2 
+            px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border shadow-xl text-xs ${isDark ? 'bg-zinc-900 text-gray-200 border-zinc-700' : 'bg-white text-gray-800 border-gray-200'}
+        `}>
+          {tooltip}
+        </div>
+      )}
+      {activeMenu !== category && (
+        // Mobile Tooltip (above)
+        <div className={`
+            absolute 
+            md:hidden bottom-full mb-3 left-1/2 -translate-x-1/2 
+            px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border shadow-xl text-xs ${isDark ? 'bg-zinc-900 text-gray-200 border-zinc-700' : 'bg-white text-gray-800 border-gray-200'}
+        `}>
           {tooltip}
         </div>
       )}
@@ -170,7 +172,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors w-full group ${active ? (isDark ? 'bg-zinc-800/80' : 'bg-gray-100') : itemHover}`}
       onClick={(e) => {
         e.stopPropagation();
-        handleAction(onClick);
+        onClick();
       }}
     >
       <div className={`w-8 h-8 flex items-center justify-center border rounded-lg shadow-sm shrink-0 transition-colors ${active ? 'text-cyan-400 border-cyan-500/30' : (isDark ? 'bg-zinc-800 border-zinc-700 text-gray-400 group-hover:text-cyan-400' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:text-cyan-600')}`}>
@@ -210,10 +212,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         key={node.id} 
                         node={node} 
                         type={historyTab === 'IMAGES' ? 'image' : 'video'} 
-                        onClick={() => {
-                            onPreviewMedia((historyTab === 'IMAGES' ? node.imageSrc : node.videoSrc) || '', historyTab === 'IMAGES' ? 'image' : 'video');
-                            if (window.innerWidth < 768 && onClose) onClose();
-                        }}
+                        onClick={() => onPreviewMedia((historyTab === 'IMAGES' ? node.imageSrc : node.videoSrc) || '', historyTab === 'IMAGES' ? 'image' : 'video')}
                      />
                  ))}
              </div>
@@ -264,8 +263,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
 
     return (
-      <div className={`absolute left-[4.5rem] top-0 flex items-start h-full md:h-auto pointer-events-none md:pointer-events-auto ${window.innerWidth < 768 ? 'w-[calc(100vw-6rem)] z-[250]' : ''}`}>
-          <div className={`${menuBg} rounded-2xl p-3 flex flex-col gap-1 w-64 z-40 animate-in fade-in slide-in-from-left-2 shadow-2xl border pointer-events-auto`}>
+      <div className={`
+          absolute 
+          md:left-full md:top-0 md:ml-4 md:bottom-auto md:mb-0 md:translate-x-0
+          bottom-full left-1/2 -translate-x-1/2 mb-4
+          flex items-start
+      `}>
+          <div className={`${menuBg} rounded-2xl p-3 flex flex-col gap-1 w-64 z-40 animate-in fade-in slide-in-from-left-2 shadow-2xl border`}>
             <div className={`px-2 py-1 mb-2 border-b text-[10px] font-bold uppercase tracking-wider ${titleColor}`}>
               {title}
             </div>
@@ -275,46 +279,34 @@ const Sidebar: React.FC<SidebarProps> = ({
     );
   };
 
-  // Mobile Backdrop
-  const mobileBackdrop = isOpen && (
-      <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[190] md:hidden animate-in fade-in duration-200"
-        onClick={onClose}
-      />
-  );
-
   return (
-    <>
-        {mobileBackdrop}
-        <div 
-            ref={menuRef} 
-            className={`fixed left-0 top-0 h-full md:left-4 md:top-1/2 md:h-auto md:-translate-y-1/2 z-[200] flex items-start transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
-        >
-        {/* Main Bar */}
-        <div className={`${sidebarBg} backdrop-blur-md shadow-2xl border-r md:border rounded-r-2xl md:rounded-2xl p-2 flex flex-col items-center h-full md:h-auto justify-center md:justify-start`}>
-            {/* Mobile Close Button */}
-            <div className="md:hidden mb-4">
-                 <button onClick={onClose} className={`p-2 rounded-full ${isDark ? 'bg-zinc-800 text-white' : 'bg-gray-100 text-black'}`}>
-                     <Icons.X size={20} />
-                 </button>
-            </div>
+    <div ref={menuRef} className={`
+        fixed z-[200] flex 
+        md:left-4 md:top-1/2 md:-translate-y-1/2 md:flex-row md:items-start md:bottom-auto md:translate-x-0
+        bottom-6 left-1/2 -translate-x-1/2 flex-col items-center
+    `}>
+      {/* Main Bar */}
+      <div className={`${sidebarBg} backdrop-blur-md shadow-2xl border rounded-2xl p-2 flex items-center md:flex-col flex-row gap-1 md:gap-0`}>
+        <div className={`w-8 h-1 rounded-full mb-4 md:block hidden ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
+        
+        <SidebarItem icon={Icons.Plus} category="ADD" tooltip="Add Node" />
+        <div className={`w-full h-px my-2 md:block hidden ${dividerColor}`} />
+        <div className={`h-8 w-px mx-2 md:hidden block ${dividerColor}`} />
+        
+        <SidebarItem icon={Icons.Folder} category="WORKFLOW" tooltip="Workflow" />
+        <SidebarItem icon={Icons.Clock} category="HISTORY" tooltip="History" />
+        <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" />
+        
+        <div className={`w-full h-px my-2 md:block hidden ${dividerColor}`} />
+        <div className={`h-8 w-px mx-2 md:hidden block ${dividerColor}`} />
 
-            <div className={`w-8 h-1 rounded-full mb-4 hidden md:block ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
-            
-            <SidebarItem icon={Icons.Plus} category="ADD" tooltip="Add Node" />
-            <div className={`w-full h-px my-2 ${dividerColor}`} />
-            <SidebarItem icon={Icons.Folder} category="WORKFLOW" tooltip="Workflow" />
-            <SidebarItem icon={Icons.Clock} category="HISTORY" tooltip="History" />
-            <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" />
-            <div className={`w-full h-px my-2 ${dividerColor}`} />
-            <SidebarItem icon={Icons.Settings} category="SETTINGS" tooltip="Settings" />
-        </div>
+        <SidebarItem icon={Icons.Settings} category="SETTINGS" tooltip="Settings" />
+      </div>
 
-        <div className="relative h-full flex items-center">
-            {renderSubMenu()}
-        </div>
-        </div>
-    </>
+      <div className="relative">
+        {renderSubMenu()}
+      </div>
+    </div>
   );
 };
 

@@ -65,7 +65,7 @@ const CanvasWithSidebar: React.FC = () => {
   const [showColorPicker, setShowColorPicker] = useState(false);
 
   // Minimap State
-  const [showMinimap, setShowMinimap] = useState(window.innerWidth > 768); // Hide on mobile by default
+  const [showMinimap, setShowMinimap] = useState(true);
   
   // Viewport tracking for Minimap
   const [viewportSize, setViewportSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -76,31 +76,20 @@ const CanvasWithSidebar: React.FC = () => {
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Sidebar State (Mobile)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
   // History State (Persist deleted nodes that have content)
   const [deletedNodes, setDeletedNodes] = useState<NodeData[]>([]);
 
   // Dragging State Refs
+  // Stores the set of Node IDs that should move when the mouse moves.
+  // Calculated ONCE at mouse down to prevent "scooping" up unrelated nodes during drag.
   const draggingNodesRef = useRef<Set<string>>(new Set());
-
-  // Touch Handling Refs
-  const touchStartDistRef = useRef<number>(0);
-  const touchStartScaleRef = useRef<number>(1);
-  const touchStartMidRef = useRef<Point>({ x: 0, y: 0 });
-  const lastTouchPosRef = useRef<Point>({ x: 0, y: 0 });
-  const isPinchingRef = useRef<boolean>(false);
 
   useEffect(() => {
       dragModeRef.current = dragMode;
   }, [dragMode]);
 
   useEffect(() => {
-      const handleResize = () => {
-          setViewportSize({ width: window.innerWidth, height: window.innerHeight });
-          if (window.innerWidth <= 768) setShowMinimap(false);
-      };
+      const handleResize = () => setViewportSize({ width: window.innerWidth, height: window.innerHeight });
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -219,7 +208,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleAlign = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
-      // ... (Implementation same as before)
       if (selectedNodeIds.size < 2) return;
 
       setNodes(prevNodes => {
@@ -317,8 +305,7 @@ const CanvasWithSidebar: React.FC = () => {
         x = 0; y = 0;
       }
     }
-    
-    // ... (rest of addNode implementation)
+
     let w = dataOverride?.width || DEFAULT_NODE_WIDTH;
     let h = dataOverride?.height || DEFAULT_NODE_HEIGHT;
 
@@ -356,13 +343,9 @@ const CanvasWithSidebar: React.FC = () => {
     
     setNodes(prev => [...prev, newNode]);
     setSelectedNodeIds(new Set([newNode.id]));
-    
-    // Auto-close sidebar on mobile
-    setIsSidebarOpen(false);
   };
 
   const handleQuickAddNode = (type: NodeType) => {
-      // ... (Implementation same as before)
       if (!quickAddMenu) return;
 
       const newId = generateId();
@@ -403,7 +386,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleToolbarAction = (nodeId: string, actionId: string) => {
-      // ... (Implementation same as before)
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
 
@@ -435,7 +417,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   // Grouping Logic
-  // ... (Implementation same as before)
   const handleGroupSelection = () => {
       const selected = nodes.filter(n => selectedNodeIds.has(n.id));
       if (selected.length < 1) return;
@@ -506,7 +487,6 @@ const CanvasWithSidebar: React.FC = () => {
   }, [selectedNodeIds]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
-    // ... (Implementation same as before)
     const activeElement = document.activeElement;
     const isInputFocused = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement || (activeElement as HTMLElement)?.isContentEditable;
     if (isInputFocused) return;
@@ -564,7 +544,6 @@ const CanvasWithSidebar: React.FC = () => {
   }, [handlePaste]);
 
   useEffect(() => {
-    // ... (Implementation same as before)
     const handleKeyDown = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
         const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
@@ -609,7 +588,6 @@ const CanvasWithSidebar: React.FC = () => {
             if (showNewWorkflowDialog) setShowNewWorkflowDialog(false);
             if (isSettingsOpen) setIsSettingsOpen(false);
             setShowColorPicker(false);
-            setIsSidebarOpen(false);
         }
         if (e.code === 'Space') spacePressed.current = true;
     };
@@ -644,7 +622,6 @@ const CanvasWithSidebar: React.FC = () => {
   }, []);
 
   const handleGenerate = async (nodeId: string) => {
-    // ... (Implementation same as before)
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
     updateNodeData(nodeId, { isLoading: true });
@@ -693,7 +670,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleMaximize = (nodeId: string) => {
-      // ... (Implementation same as before)
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
       if (node.videoSrc) setPreviewMedia({ url: node.videoSrc, type: 'video' });
@@ -704,7 +680,6 @@ const CanvasWithSidebar: React.FC = () => {
   const handleHistoryPreview = (url: string, type: 'image' | 'video') => setPreviewMedia({ url, type });
 
   const copyImageToClipboard = async (nodeId: string) => {
-      // ... (Implementation same as before)
       const node = nodes.find(n => n.id === nodeId);
       if (node && node.imageSrc) {
           try {
@@ -722,7 +697,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleReplaceImage = (e: React.ChangeEvent<HTMLInputElement>) => {
-      // ... (Implementation same as before)
       const file = e.target.files?.[0];
       const nodeId = nodeToReplaceRef.current;
       if (file && nodeId) {
@@ -753,7 +727,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleSaveWorkflow = () => {
-    // ... (Implementation same as before)
     const workflowData = { nodes, connections, transform, version: "1.0" };
     const blob = new Blob([JSON.stringify(workflowData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -769,7 +742,6 @@ const CanvasWithSidebar: React.FC = () => {
   const handleNewWorkflow = () => setShowNewWorkflowDialog(false); 
   
   const handleConfirmNew = (shouldSave: boolean) => {
-    // ... (Implementation same as before)
     if (shouldSave) handleSaveWorkflow();
     const withContent = nodes.filter(n => n.imageSrc || n.videoSrc);
     if (withContent.length > 0) setDeletedNodes(prev => [...prev, ...withContent]);
@@ -782,7 +754,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleLoadWorkflow = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... (Implementation same as before)
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -801,7 +772,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleDownload = async (nodeId: string) => {
-      // ... (Implementation same as before)
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
       const url = node.videoSrc || node.imageSrc;
@@ -833,7 +803,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleImportAsset = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... (Implementation same as before)
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -859,7 +828,6 @@ const CanvasWithSidebar: React.FC = () => {
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
 
   const handleDrop = (e: React.DragEvent) => {
-      // ... (Implementation same as before)
       e.preventDefault(); e.stopPropagation();
       const files: File[] = Array.from(e.dataTransfer.files); 
       if (files.length === 0) return;
@@ -896,7 +864,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
-      // ... (Implementation same as before)
       const newK = parseFloat(e.target.value);
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -910,7 +877,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleResetZoom = () => {
-      // ... (Implementation same as before)
       const rect = containerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const mouseX = rect.width / 2;
@@ -923,7 +889,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    // ... (Implementation same as before)
     if (e.ctrlKey || e.metaKey) e.preventDefault();
     const zoomIntensity = 0.1;
     const direction = e.deltaY > 0 ? -1 : 1;
@@ -940,7 +905,6 @@ const CanvasWithSidebar: React.FC = () => {
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // ... (Implementation same as before)
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
     if (selectedConnectionId) setSelectedConnectionId(null);
@@ -953,6 +917,14 @@ const CanvasWithSidebar: React.FC = () => {
       e.preventDefault(); return;
     }
     if (e.target === containerRef.current && e.button === 0) {
+        // Mobile Adaptation: If small screen, default to PAN instead of SELECT for background drag
+        if (window.innerWidth < 768) {
+            setDragMode('PAN');
+            dragStartRef.current = { x: e.clientX, y: e.clientY };
+            initialTransformRef.current = { ...transform };
+            return;
+        }
+
         setDragMode('SELECT');
         dragStartRef.current = { x: e.clientX, y: e.clientY };
         setSelectionBox({ x: 0, y: 0, w: 0, h: 0 }); 
@@ -960,139 +932,7 @@ const CanvasWithSidebar: React.FC = () => {
     }
   };
 
-  // --- Touch Event Handlers ---
-
-  const getDistance = (touches: React.TouchList) => {
-      return Math.hypot(
-          touches[0].clientX - touches[1].clientX,
-          touches[0].clientY - touches[1].clientY
-      );
-  };
-
-  const getMidpoint = (touches: React.TouchList) => {
-      return {
-          x: (touches[0].clientX + touches[1].clientX) / 2,
-          y: (touches[0].clientY + touches[1].clientY) / 2
-      };
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-      if (contextMenu) setContextMenu(null);
-      if (quickAddMenu) setQuickAddMenu(null);
-      
-      if (e.touches.length === 2) {
-          // Pinch Zoom Start
-          isPinchingRef.current = true;
-          touchStartDistRef.current = getDistance(e.touches);
-          touchStartScaleRef.current = transform.k;
-          touchStartMidRef.current = getMidpoint(e.touches);
-          initialTransformRef.current = { ...transform };
-          setDragMode('NONE'); // Ensure drag modes don't interfere
-      } else if (e.touches.length === 1) {
-          // Single touch - could be Pan (background) or Drag Node (if passed from node)
-          // For container touch, default to PAN if not hitting a node
-          isPinchingRef.current = false;
-          const touch = e.touches[0];
-          lastTouchPosRef.current = { x: touch.clientX, y: touch.clientY };
-          
-          if (e.target === containerRef.current) {
-               setDragMode('PAN');
-               dragStartRef.current = { x: touch.clientX, y: touch.clientY };
-               initialTransformRef.current = { ...transform };
-          }
-      }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-      if (isPinchingRef.current && e.touches.length === 2) {
-          e.preventDefault(); // Prevent browser zoom
-          
-          const currentDist = getDistance(e.touches);
-          const scaleFactor = currentDist / touchStartDistRef.current;
-          let newK = touchStartScaleRef.current * scaleFactor;
-          newK = Math.min(Math.max(0.4, newK), 2);
-
-          // Zoom towards center of pinch
-          const mid = getMidpoint(e.touches);
-          const rect = containerRef.current!.getBoundingClientRect();
-          const startMid = touchStartMidRef.current;
-          
-          // Logic: 
-          // 1. Calculate World Coord of the start midpoint
-          const worldX = (startMid.x - rect.left - initialTransformRef.current.x) / initialTransformRef.current.k;
-          const worldY = (startMid.y - rect.top - initialTransformRef.current.y) / initialTransformRef.current.k;
-          
-          // 2. Adjust X/Y so that world point stays under current midpoint
-          // newX = currentMidX - worldX * newK
-          const newX = (mid.x - rect.left) - worldX * newK;
-          const newY = (mid.y - rect.top) - worldY * newK;
-
-          setTransform({ x: newX, y: newY, k: newK });
-      } else if (e.touches.length === 1) {
-          const touch = e.touches[0];
-          const dx = touch.clientX - lastTouchPosRef.current.x;
-          const dy = touch.clientY - lastTouchPosRef.current.y;
-          lastTouchPosRef.current = { x: touch.clientX, y: touch.clientY };
-
-          if (dragMode === 'PAN') {
-             e.preventDefault(); // Prevent scroll
-             setTransform(prev => ({
-                 ...prev,
-                 x: prev.x + dx,
-                 y: prev.y + dy
-             }));
-          } else if (dragMode === 'DRAG_NODE') {
-              e.preventDefault();
-              // Logic similar to mouse move DRAG_NODE
-              const worldDx = dx / transform.k;
-              const worldDy = dy / transform.k;
-              
-              const movingNodeIds = draggingNodesRef.current;
-              setNodes(prev => prev.map(n => {
-                  if (movingNodeIds.has(n.id)) {
-                      return { ...n, x: n.x + worldDx, y: n.y + worldDy };
-                  }
-                  return n;
-              }));
-          }
-      }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-      if (e.touches.length === 0) {
-          isPinchingRef.current = false;
-          if (dragMode !== 'NONE') {
-              handleMouseUp({ clientX: lastTouchPosRef.current.x, clientY: lastTouchPosRef.current.y } as any);
-          }
-      }
-  };
-  
-  // Adapted Node Touch Start
-  const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
-      e.stopPropagation();
-      // Only single finger drags nodes
-      if (e.touches.length === 1) {
-          setDragMode('DRAG_NODE');
-          const touch = e.touches[0];
-          lastTouchPosRef.current = { x: touch.clientX, y: touch.clientY };
-          
-          // Selection Logic (Simplified for Touch)
-          const newSelection = new Set([id]);
-          setSelectedNodeIds(newSelection);
-          draggingNodesRef.current = newSelection;
-          
-          // Reorder for Z-Index
-          setNodes(prev => {
-              const moving = prev.filter(n => n.id === id);
-              const others = prev.filter(n => n.id !== id);
-              return [...others, ...moving];
-          });
-      }
-  };
-
-
   const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
-    // ... (Implementation same as before)
     e.stopPropagation();
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
@@ -1172,7 +1012,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeContextMenu = (e: React.MouseEvent, id: string, type: NodeType) => {
-      // ... (Implementation same as before)
       e.stopPropagation(); e.preventDefault();
       const worldPos = screenToWorld(e.clientX, e.clientY);
       setContextMenu({ type: 'NODE', nodeId: id, nodeType: type, x: e.clientX, y: e.clientY, worldX: worldPos.x, worldY: worldPos.y });
@@ -1180,14 +1019,12 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleCanvasContextMenu = (e: React.MouseEvent) => {
-      // ... (Implementation same as before)
       e.preventDefault();
       const worldPos = screenToWorld(e.clientX, e.clientY);
       setContextMenu({ type: 'CANVAS', x: e.clientX, y: e.clientY, worldX: worldPos.x, worldY: worldPos.y });
   };
 
   const handleResizeStart = (e: React.MouseEvent, nodeId: string, direction: string = 'SE') => {
-      // ... (Implementation same as before)
       e.stopPropagation(); e.preventDefault();
       const node = nodes.find(n => n.id === nodeId);
       if (!node) return;
@@ -1205,7 +1042,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleConnectStart = (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => {
-    // ... (Implementation same as before)
     e.stopPropagation(); e.preventDefault();
     connectionStartRef.current = { nodeId, type };
     setDragMode('CONNECT');
@@ -1213,7 +1049,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    // ... (Implementation same as before)
     lastMousePosRef.current = { x: e.clientX, y: e.clientY };
     const worldPos = screenToWorld(e.clientX, e.clientY);
     if (dragMode !== 'NONE' && e.buttons === 0) { setDragMode('NONE'); dragStartRef.current = { x: 0, y: 0 }; return; }
@@ -1328,7 +1163,6 @@ const CanvasWithSidebar: React.FC = () => {
   const removeConnection = (id: string) => { setConnections(prev => prev.filter(c => c.id !== id)); setSelectedConnectionId(null); };
 
   // Calculate Selection Center for Group Toolbar
-  // ... (Implementation same as before)
   const getSelectionCenter = () => {
       const selected = nodes.filter(n => selectedNodeIds.has(n.id));
       if (selected.length === 0) return null;
@@ -1347,7 +1181,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const renderGroupToolbar = () => {
-      // ... (Implementation same as before)
       // Show if multiple nodes selected OR single Group node selected
       const isMultiSelect = selectedNodeIds.size > 1;
       const singleGroupSelected = selectedNodeIds.size === 1 && nodes.find(n => n.id === Array.from(selectedNodeIds)[0])?.type === NodeType.GROUP;
@@ -1364,14 +1197,12 @@ const CanvasWithSidebar: React.FC = () => {
       // Clamps between 0.65 and 1.0
       const scale = Math.max(0.65, Math.min(1, transform.k));
       
-      // Dynamic yOffset to prevent occlusion of the Group Title which scales with the canvas.
-      // We calculate the world-space height needed (approx 45px for title + spacing) and scale it to screen space,
-      // plus a fixed screen-space buffer (15px).
-      const yOffset = 15 + (45 * transform.k);
+      // Dynamic offset based on zoom level to clear the group title (approx 35px in world space)
+      const yOffset = (40 * transform.k) + 20;
 
       return (
           <div 
-            className="absolute z-[150] flex flex-col items-center pointer-events-none origin-bottom" 
+            className="absolute z-[150] flex flex-col items-center pointer-events-none origin-bottom" // Removed transition-all duration-200 ease-out to fix lag
             style={{ 
                 left: pos.x, 
                 top: pos.y - yOffset,
@@ -1423,11 +1254,10 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const renderNewWorkflowDialog = () => {
-      // ... (Implementation same as before)
       if (!showNewWorkflowDialog) return null;
       return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowNewWorkflowDialog(false)}>
-            <div className={`w-[90%] max-w-[400px] p-6 rounded-2xl shadow-2xl border flex flex-col gap-4 transform transition-all scale-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700 text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`w-[400px] p-6 rounded-2xl shadow-2xl border flex flex-col gap-4 transform transition-all scale-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700 text-gray-200' : 'bg-white border-gray-200 text-gray-800'}`} onClick={(e) => e.stopPropagation()}>
                 <div>
                     <h3 className="text-lg font-bold flex items-center gap-2"><Icons.FilePlus size={20} className="text-cyan-500"/>Create New Workflow</h3>
                     <p className={`text-xs mt-2 leading-relaxed ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Do you want to save your current workflow before creating a new one? <br/>Any unsaved changes will be permanently lost.</p>
@@ -1443,7 +1273,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const renderContextMenu = () => {
-    // ... (Implementation same as before)
     if (!contextMenu) return null;
     return (
         <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1475,7 +1304,6 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const renderQuickAddMenu = () => {
-    // ... (Implementation same as before)
     if (!quickAddMenu) return null;
     return (
         <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col animate-in fade-in zoom-in-95 duration-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: quickAddMenu.x, top: quickAddMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1496,14 +1324,6 @@ const CanvasWithSidebar: React.FC = () => {
         <ThemeSwitcher isDark={isDark} onToggle={toggleTheme} />
         <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} isDark={isDark} />
 
-        {/* Mobile Sidebar Toggle Button */}
-        <button 
-            className={`fixed top-6 left-6 z-[160] w-10 h-10 rounded-full flex items-center justify-center shadow-lg md:hidden border transition-all ${isDark ? 'bg-zinc-800/80 text-white border-zinc-700' : 'bg-white/90 text-black border-gray-200'}`}
-            onClick={() => setIsSidebarOpen(true)}
-        >
-            <Icons.LayoutGrid size={20} />
-        </button>
-
         <Sidebar 
           onAddNode={addNode} 
           onSaveWorkflow={handleSaveWorkflow}
@@ -1515,8 +1335,6 @@ const CanvasWithSidebar: React.FC = () => {
           nodes={[...nodes, ...deletedNodes]}
           onPreviewMedia={handleHistoryPreview}
           isDark={isDark}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
         />
         <input type="file" ref={workflowInputRef} hidden accept=".aistudio-flow,.json" onChange={handleLoadWorkflow} />
         <input type="file" ref={assetInputRef} hidden accept="image/*" onChange={handleImportAsset} />
@@ -1535,9 +1353,6 @@ const CanvasWithSidebar: React.FC = () => {
             onContextMenu={handleCanvasContextMenu}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
         >
              {/* SVG Layer: Render first so it is behind nodes */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-0">
@@ -1584,24 +1399,21 @@ const CanvasWithSidebar: React.FC = () => {
                         scale={transform.k}
                         isDark={isDark}
                     >
-                         {/* Touch handler wrapper for nodes */}
-                         <div onTouchStart={(e) => handleNodeTouchStart(e, node.id)} className="w-full h-full">
-                            <NodeContent 
-                                data={node} 
-                                updateData={updateNodeData} 
-                                onGenerate={handleGenerate} 
-                                selected={selectedNodeIds.has(node.id)}
-                                showControls={selectedNodeIds.size === 1}
-                                inputs={getInputImages(node.id)}
-                                onMaximize={handleMaximize}
-                                onDownload={handleDownload}
-                                onToolbarAction={handleToolbarAction}
-                                onUpload={triggerReplaceImage}
-                                isSelecting={dragMode === 'SELECT'}
-                                onDelete={deleteNode}
-                                isDark={isDark}
-                            />
-                         </div>
+                        <NodeContent 
+                            data={node} 
+                            updateData={updateNodeData} 
+                            onGenerate={handleGenerate} 
+                            selected={selectedNodeIds.has(node.id)}
+                            showControls={selectedNodeIds.size === 1}
+                            inputs={getInputImages(node.id)}
+                            onMaximize={handleMaximize}
+                            onDownload={handleDownload}
+                            onToolbarAction={handleToolbarAction}
+                            onUpload={triggerReplaceImage}
+                            isSelecting={dragMode === 'SELECT'}
+                            onDelete={deleteNode}
+                            isDark={isDark}
+                        />
                     </BaseNode>
                 ))}
             </div>
@@ -1622,10 +1434,10 @@ const CanvasWithSidebar: React.FC = () => {
                 <div className="fixed border border-cyan-500/50 bg-cyan-500/10 pointer-events-none z-50" style={{ left: containerRef.current!.getBoundingClientRect().left + selectionBox.x, top: containerRef.current!.getBoundingClientRect().top + selectionBox.y, width: selectionBox.w, height: selectionBox.h }}/>
             )}
             
-            {/* New Zoom Control & Minimap Container */}
-            <div className="absolute bottom-6 right-6 flex flex-col items-end gap-3 z-[100] pointer-events-none">
+            {/* New Zoom Control & Minimap Container - Mobile Adaptive Position with Strict Desktop Reset */}
+            <div className="absolute bottom-24 right-4 md:bottom-6 md:right-6 flex flex-col items-end gap-3 z-[100] pointer-events-none">
                 {showMinimap && (
-                    <div className="pointer-events-auto hidden md:block">
+                    <div className="pointer-events-auto">
                         <Minimap nodes={nodes} transform={transform} viewportSize={viewportSize} isDark={isDark} onNavigate={handleNavigate} />
                     </div>
                 )}
@@ -1634,13 +1446,13 @@ const CanvasWithSidebar: React.FC = () => {
                 <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full shadow-lg pointer-events-auto border backdrop-blur-md ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700 text-gray-300' : 'bg-white/90 border-gray-200 text-gray-600'}`}>
                     <button 
                         onClick={() => setShowMinimap(!showMinimap)}
-                        className={`p-1 rounded-full transition-colors hidden md:block ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'} ${showMinimap ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : ''}`}
+                        className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'} ${showMinimap ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : ''}`}
                         title={showMinimap ? "Hide Minimap" : "Show Minimap"}
                     >
                         <Icons.Map size={16} />
                     </button>
                     
-                    <div className={`w-px h-4 hidden md:block ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
+                    <div className={`w-px h-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
 
                     <input 
                         type="range" 
@@ -1649,9 +1461,9 @@ const CanvasWithSidebar: React.FC = () => {
                         step="0.1" 
                         value={transform.k} 
                         onChange={handleZoom} 
-                        className="w-24 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500 hidden md:block"
+                        className="w-24 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                     />
-                    <div className="flex items-center gap-2 md:border-l md:pl-3 border-gray-500/20">
+                    <div className="flex items-center gap-2 border-l pl-3 border-gray-500/20">
                         <span className="text-xs font-mono min-w-[36px]">{Math.round(transform.k * 100)}%</span>
                         <button 
                             onClick={handleResetZoom} 

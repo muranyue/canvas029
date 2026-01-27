@@ -392,21 +392,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 md:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-            <div className={`w-full max-w-6xl h-[90vh] md:h-[85vh] rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl border ${isDark ? 'bg-[#0B0C0E] border-zinc-800' : 'bg-white border-gray-200'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-0 md:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+            <div className={`w-full md:max-w-6xl h-full md:h-[85vh] rounded-none md:rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl border ${isDark ? 'bg-[#0B0C0E] border-zinc-800' : 'bg-white border-gray-200'}`} onClick={(e) => e.stopPropagation()}>
                 
                 {/* Sidebar */}
-                <div className={`w-full md:w-64 flex flex-col border-b md:border-b-0 md:border-r ${sidebarBg} max-h-[30vh] md:max-h-full`}>
-                    <div className="p-4 md:p-6 pb-2 md:pb-4 border-b border-dashed border-gray-500/10 flex justify-between items-center">
+                <div className={`w-full md:w-64 flex flex-col border-b md:border-b-0 md:border-r ${sidebarBg}`}>
+                    <div className="p-4 md:p-6 pb-4 border-b border-dashed border-gray-500/10">
                         <div className={`flex items-center gap-3`}>
                             <div className="p-2 bg-cyan-500 rounded-lg shadow-lg shadow-cyan-500/20"><Icons.Settings size={18} className="text-white"/></div>
                             <h2 className={`font-bold text-base ${textMain}`}>API Manager</h2>
                         </div>
-                        <button className="md:hidden" onClick={onClose}><Icons.X size={20} className={textSub} /></button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto py-2 md:py-6 px-4 space-y-2 custom-scrollbar">
-                        <div className={`px-2 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 hidden md:block`}>Service Providers <span className="ml-1 opacity-50">{providers.length}</span></div>
+                    <div className="flex-1 overflow-x-auto md:overflow-y-auto py-2 md:py-6 px-4 space-x-2 md:space-x-0 md:space-y-2 custom-scrollbar flex flex-row md:flex-col">
+                        <div className={`hidden md:block px-2 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2`}>Service Providers <span className="ml-1 opacity-50">{providers.length}</span></div>
                         {providers.map(provider => {
                             const ProviderIcon = PROVIDER_ICONS[provider] || Icons.Database;
                             const isActive = selectedProvider === provider;
@@ -416,22 +415,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                                 <button
                                     key={provider}
                                     onClick={() => { setSelectedProvider(provider); setEditingModelKey(null); setIsCreating(false); }}
-                                    className={`w-full flex items-center justify-between px-3 py-3 rounded-lg text-xs transition-colors duration-200 group ${isActive ? sidebarItemActive : sidebarItemInactive}`}
+                                    className={`w-auto md:w-full flex-shrink-0 flex items-center justify-between px-3 py-2 md:py-3 rounded-lg text-xs transition-colors duration-200 group ${isActive ? sidebarItemActive : sidebarItemInactive}`}
                                 >
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 md:gap-3">
                                         <ProviderIcon size={14} className={isActive ? 'text-cyan-600 dark:text-cyan-400' : isDark ? 'text-zinc-500' : 'text-gray-400'} />
-                                        <span className="font-medium">{provider}</span>
+                                        <span className="font-medium whitespace-nowrap">{provider}</span>
                                     </div>
                                     {isConnected && (
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                                        <div className="ml-2 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)] hidden md:block"></div>
                                     )}
                                 </button>
                             );
                         })}
                     </div>
 
-                    {/* Footer Actions */}
-                    <div className={`p-4 border-t mt-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'} hidden md:block`}>
+                    {/* Footer Actions - Hide on small mobile height if needed, or make flexible */}
+                    <div className={`p-4 border-t mt-auto hidden md:block ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                         <div className="grid grid-cols-2 gap-2">
                             <button 
                                 onClick={() => configInputRef.current?.click()} 
@@ -466,12 +465,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                                 </div>
                                 <div className="flex gap-2">
                                      <button onClick={() => startCreation('IMAGE')} className={`px-3 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1.5 ${isDark ? 'border-zinc-700 hover:border-zinc-500 text-gray-300' : 'border-gray-200 hover:border-gray-300 text-gray-600'}`}>
-                                        <Icons.Plus size={12}/> <span className="hidden md:inline">Custom Model</span><span className="md:hidden">Add</span>
+                                        <Icons.Plus size={12}/> Custom Model
                                      </button>
                                 </div>
                             </div>
 
-                            {/* Grid - Key added for animation reset on provider change */}
+                            {/* Grid */}
                             <div key={selectedProvider} className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar animate-in fade-in slide-in-from-bottom-4 duration-300">
                                 {groupedModels[selectedProvider]?.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
