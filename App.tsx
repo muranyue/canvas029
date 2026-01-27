@@ -83,6 +83,9 @@ const CanvasWithSidebar: React.FC = () => {
   // Stores the set of Node IDs that should move when the mouse moves.
   // Calculated ONCE at mouse down to prevent "scooping" up unrelated nodes during drag.
   const draggingNodesRef = useRef<Set<string>>(new Set());
+  
+  // Touch Handling Refs
+  const touchStartRef = useRef<{ x: number, y: number, dist: number, centerX: number, centerY: number } | null>(null);
 
   useEffect(() => {
       dragModeRef.current = dragMode;
@@ -444,8 +447,6 @@ const CanvasWithSidebar: React.FC = () => {
 
       setNodes(prev => {
           // IMPORTANT: When creating a group, we must order it BEHIND the selected nodes.
-          // DOM order determines Z-Index (later elements are on top).
-          // Order should be: [...others, groupNode, ...selectedNodes]
           const selectedIds = new Set(selected.map(n => n.id));
           const others = prev.filter(n => !selectedIds.has(n.id));
           return [...others, groupNode, ...selected];
@@ -900,6 +901,77 @@ const CanvasWithSidebar: React.FC = () => {
     setTransform({ x: (e.clientX - rect.left) - worldX * newK, y: (e.clientY - rect.top) - worldY * newK, k: newK });
   };
 
+  // --- Touch Event Handlers for Mobile Pan/Zoom ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+      // Don't interfere if touching a UI element that should handle its own events
+      if ((e.target as HTMLElement).closest('button, input, .node-content')) return;
+
+      if (e.touches.length === 1) {
+          const touch = e.touches[0];
+          dragStartRef.current = { x: touch.clientX, y: touch.clientY };
+          initialTransformRef.current = { ...transform };
+          setDragMode('PAN');
+      } else if (e.touches.length === 2) {
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+          const centerX = (t1.clientX + t2.clientX) / 2;
+          const centerY = (t1.clientY + t2.clientY) / 2;
+          
+          touchStartRef.current = { x: centerX, y: centerY, dist, centerX, centerY };
+          initialTransformRef.current = { ...transform };
+          setDragMode('NONE'); // Pinch isn't a drag mode in the traditional sense here
+      }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+      if (e.touches.length === 1 && dragMode === 'PAN') {
+          const touch = e.touches[0];
+          const dx = touch.clientX - dragStartRef.current.x;
+          const dy = touch.clientY - dragStartRef.current.y;
+          setTransform({
+              ...initialTransformRef.current,
+              x: initialTransformRef.current.x + dx,
+              y: initialTransformRef.current.y + dy
+          });
+      } else if (e.touches.length === 2 && touchStartRef.current) {
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+          
+          if (touchStartRef.current.dist > 0) {
+              const scale = dist / touchStartRef.current.dist;
+              let newK = initialTransformRef.current.k * scale;
+              newK = Math.min(Math.max(0.4, newK), 2.5);
+
+              // Calculate new position to keep the center point stable
+              // P_new = P_old * scale + T_new
+              // We want P_screen to stay at touchStartRef.current.center
+              // world_center = (center - T_old) / K_old
+              // center = world_center * K_new + T_new
+              // T_new = center - world_center * K_new
+              
+              const rect = containerRef.current!.getBoundingClientRect();
+              // Adjust centers relative to container
+              const cx = touchStartRef.current.centerX - rect.left;
+              const cy = touchStartRef.current.centerY - rect.top;
+
+              const worldX = (cx - initialTransformRef.current.x) / initialTransformRef.current.k;
+              const worldY = (cy - initialTransformRef.current.y) / initialTransformRef.current.k;
+
+              const newX = cx - worldX * newK;
+              const newY = cy - worldY * newK;
+
+              setTransform({ x: newX, y: newY, k: newK });
+          }
+      }
+  };
+
+  const handleTouchEnd = () => {
+      setDragMode('NONE');
+      touchStartRef.current = null;
+  };
+
   const handleNavigate = useCallback((x: number, y: number) => {
       setTransform(prev => ({ ...prev, x, y }));
   }, []);
@@ -917,14 +989,6 @@ const CanvasWithSidebar: React.FC = () => {
       e.preventDefault(); return;
     }
     if (e.target === containerRef.current && e.button === 0) {
-        // Mobile Adaptation: If small screen, default to PAN instead of SELECT for background drag
-        if (window.innerWidth < 768) {
-            setDragMode('PAN');
-            dragStartRef.current = { x: e.clientX, y: e.clientY };
-            initialTransformRef.current = { ...transform };
-            return;
-        }
-
         setDragMode('SELECT');
         dragStartRef.current = { x: e.clientX, y: e.clientY };
         setSelectionBox({ x: 0, y: 0, w: 0, h: 0 }); 
@@ -957,25 +1021,29 @@ const CanvasWithSidebar: React.FC = () => {
         }
         setSelectedNodeIds(newSelection);
         
-        // 2. Determine Nodes to Drag (Group Children Logic)
+        // 2. Determine Nodes to Drag (Improved Logical Containment)
+        // A node is dragged by a group ONLY if it is visually "on top" of that group (higher index).
         const nodesToDrag = new Set(newSelection);
         const groupIds = Array.from(newSelection).filter(nid => nodes.find(n => n.id === nid)?.type === NodeType.GROUP);
         
-        const nodeIndices = new Map(nodes.map((n, i) => [n.id, i]));
-
         if (groupIds.length > 0) {
+            // Get mapping of ID to index for fast comparison
+            const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
+            
             nodes.forEach(n => {
                 if (nodesToDrag.has(n.id) || n.type === NodeType.GROUP) return; 
-                
                 for (const gid of groupIds) {
                     const group = nodes.find(g => g.id === gid);
-                    if (group && n.x >= group.x && n.x + n.width <= group.x + group.width && 
-                        n.y >= group.y && n.y + n.height <= group.y + group.height) {
+                    if (group) {
+                        const isInside = n.x >= group.x && n.x + n.width <= group.x + group.width && 
+                                         n.y >= group.y && n.y + n.height <= group.y + group.height;
                         
-                        const groupIdx = nodeIndices.get(gid) ?? -1;
-                        const nodeIdx = nodeIndices.get(n.id) ?? -1;
-                        
-                        if (nodeIdx > groupIdx) {
+                        // Check if node is ON TOP of the group (index of node > index of group)
+                        const groupIdx = idToIndex.get(gid)!;
+                        const nodeIdx = idToIndex.get(n.id)!;
+                        const isOnTop = nodeIdx > groupIdx;
+
+                        if (isInside && isOnTop) {
                             nodesToDrag.add(n.id);
                             break;
                         }
@@ -985,7 +1053,7 @@ const CanvasWithSidebar: React.FC = () => {
         }
         draggingNodesRef.current = nodesToDrag;
 
-        // 3. Reorder DOM
+        // 3. Reorder DOM (Bring Group + Children to top)
         setNodes(prev => {
             const movingNodes = prev.filter(n => nodesToDrag.has(n.id));
             const others = prev.filter(n => !nodesToDrag.has(n.id));
@@ -999,7 +1067,6 @@ const CanvasWithSidebar: React.FC = () => {
             return [...others, ...movingNodes];
         });
 
-        // Sync nextGroupColor if selecting single group
         if (newSelection.size === 1) {
             const node = nodes.find(n => n.id === id);
             if (node && node.type === NodeType.GROUP && node.color) {
@@ -1057,7 +1124,6 @@ const CanvasWithSidebar: React.FC = () => {
     } else if (dragMode === 'DRAG_NODE') {
       const dx = (e.clientX - dragStartRef.current.x) / transform.k;
       const dy = (e.clientY - dragStartRef.current.y) / transform.k;
-      
       const movingNodeIds = draggingNodesRef.current;
 
       setNodes(prev => prev.map(n => { 
@@ -1139,7 +1205,7 @@ const CanvasWithSidebar: React.FC = () => {
         connectionStartRef.current = null; 
         setSuggestedNodes([]); 
         setSelectionBox(null);
-        draggingNodesRef.current.clear(); // Clear drag set
+        draggingNodesRef.current.clear();
     }
   };
 
@@ -1172,16 +1238,13 @@ const CanvasWithSidebar: React.FC = () => {
           if (n.y < minY) minY = n.y;
           if (n.x + n.width > maxX) maxX = n.x + n.width;
       });
-      // Return top center in screen coords
-      const centerX = (minX + maxX) / 2;
       return {
-          x: centerX * transform.k + transform.x,
+          x: ((minX + maxX) / 2) * transform.k + transform.x,
           y: minY * transform.k + transform.y
       };
   };
 
   const renderGroupToolbar = () => {
-      // Show if multiple nodes selected OR single Group node selected
       const isMultiSelect = selectedNodeIds.size > 1;
       const singleGroupSelected = selectedNodeIds.size === 1 && nodes.find(n => n.id === Array.from(selectedNodeIds)[0])?.type === NodeType.GROUP;
       
@@ -1190,28 +1253,13 @@ const CanvasWithSidebar: React.FC = () => {
       const pos = getSelectionCenter();
       if (!pos) return null;
 
-      // Color Button Logic
       const currentColor = nextGroupColor;
 
-      // Scale the toolbar based on zoom level to keep it proportional but readable
-      // Clamps between 0.65 and 1.0
-      const scale = Math.max(0.65, Math.min(1, transform.k));
-      
-      // Dynamic offset based on zoom level to clear the group title (approx 35px in world space)
-      const yOffset = (40 * transform.k) + 20;
-
+      // Centered toolbar logic using translateX
       return (
-          <div 
-            className="absolute z-[150] flex flex-col items-center pointer-events-none origin-bottom" // Removed transition-all duration-200 ease-out to fix lag
-            style={{ 
-                left: pos.x, 
-                top: pos.y - yOffset,
-                transform: `translateX(-50%) scale(${scale})`
-            }}
-          >
+          <div className="absolute z-[150] flex flex-col items-center pointer-events-none" style={{ left: pos.x, top: pos.y - 60, transform: 'translateX(-50%)' }}>
               <div className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`}>
                   
-                  {/* Color Dropdown Toggle */}
                   <div className="relative border-r border-gray-500/20 pr-1.5 mr-1.5">
                       <button 
                           className={`w-6 h-6 rounded-md border flex items-center justify-center transition-transform hover:scale-105 ${isDark ? 'border-white/10' : 'border-black/5'}`}
@@ -1222,7 +1270,6 @@ const CanvasWithSidebar: React.FC = () => {
                           {showColorPicker ? <Icons.ChevronLeft size={12} className="text-black/50 rotate-90"/> : null}
                       </button>
 
-                      {/* Color Popover */}
                       {showColorPicker && (
                           <div className={`absolute top-full left-0 mt-2 p-2 rounded-xl shadow-2xl border grid grid-cols-4 gap-1.5 z-50 min-w-[120px] ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`}>
                               {GROUP_COLORS.map(color => (
@@ -1238,12 +1285,10 @@ const CanvasWithSidebar: React.FC = () => {
                   </div>
 
                   {singleGroupSelected ? (
-                      // Ungroup Mode
                       <button onClick={handleUngroup} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                           <Icons.LayoutGrid size={14}/> Ungroup
                       </button>
                   ) : (
-                      // Group Mode
                       <button onClick={handleGroupSelection} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-cyan-600 hover:bg-cyan-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 text-white'}`}>
                           <Icons.LayoutGrid size={14}/> Group
                       </button>
@@ -1341,7 +1386,7 @@ const CanvasWithSidebar: React.FC = () => {
         <input type="file" ref={replaceImageRef} hidden accept="image/*" onChange={handleReplaceImage} />
         <div 
             ref={containerRef}
-            className={`flex-1 w-full h-full relative grid-pattern select-none touch-none ${dragMode === 'PAN' ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`flex-1 w-full h-full relative grid-pattern select-none ${dragMode === 'PAN' ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{ 
                 backgroundColor: canvasBg,
                 '--grid-color': isDark ? '#27272a' : '#E4E4E7'
@@ -1350,11 +1395,14 @@ const CanvasWithSidebar: React.FC = () => {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            // Touch Events
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             onContextMenu={handleCanvasContextMenu}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
         >
-             {/* SVG Layer: Render first so it is behind nodes */}
             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-0">
                 <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
                     {connections.map(conn => {
@@ -1434,25 +1482,23 @@ const CanvasWithSidebar: React.FC = () => {
                 <div className="fixed border border-cyan-500/50 bg-cyan-500/10 pointer-events-none z-50" style={{ left: containerRef.current!.getBoundingClientRect().left + selectionBox.x, top: containerRef.current!.getBoundingClientRect().top + selectionBox.y, width: selectionBox.w, height: selectionBox.h }}/>
             )}
             
-            {/* New Zoom Control & Minimap Container - Mobile Adaptive Position with Strict Desktop Reset */}
-            <div className="absolute bottom-24 right-4 md:bottom-6 md:right-6 flex flex-col items-end gap-3 z-[100] pointer-events-none">
+            <div className="absolute bottom-24 right-6 md:bottom-6 flex flex-col items-end gap-3 z-[100] pointer-events-none transition-all duration-300">
                 {showMinimap && (
-                    <div className="pointer-events-auto">
+                    <div className="pointer-events-auto hidden md:block">
                         <Minimap nodes={nodes} transform={transform} viewportSize={viewportSize} isDark={isDark} onNavigate={handleNavigate} />
                     </div>
                 )}
 
-                {/* Zoom Controls */}
                 <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full shadow-lg pointer-events-auto border backdrop-blur-md ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700 text-gray-300' : 'bg-white/90 border-gray-200 text-gray-600'}`}>
                     <button 
                         onClick={() => setShowMinimap(!showMinimap)}
-                        className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'} ${showMinimap ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : ''}`}
+                        className={`hidden md:block p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'} ${showMinimap ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : ''}`}
                         title={showMinimap ? "Hide Minimap" : "Show Minimap"}
                     >
                         <Icons.Map size={16} />
                     </button>
                     
-                    <div className={`w-px h-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
+                    <div className={`hidden md:block w-px h-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
 
                     <input 
                         type="range" 

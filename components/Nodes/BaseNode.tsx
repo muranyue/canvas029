@@ -15,21 +15,6 @@ interface BaseNodeProps {
   isDark?: boolean;
 }
 
-// Helper to convert hex to rgba with alpha
-const hexToRgba = (hex: string, alpha: number) => {
-    let r = 0, g = 0, b = 0;
-    if (hex.length === 4) {
-        r = parseInt("0x" + hex[1] + hex[1]);
-        g = parseInt("0x" + hex[2] + hex[2]);
-        b = parseInt("0x" + hex[3] + hex[3]);
-    } else if (hex.length === 7) {
-        r = parseInt("0x" + hex[1] + hex[2]);
-        g = parseInt("0x" + hex[3] + hex[4]);
-        b = parseInt("0x" + hex[5] + hex[6]);
-    }
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
 const BaseNode: React.FC<BaseNodeProps> = ({ 
   data, selected, onMouseDown, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, isDark = true
 }) => {
@@ -38,7 +23,12 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   const portText = isDark ? 'text-zinc-400' : 'text-gray-500';
   const isGroup = data.type === NodeType.GROUP;
 
-  // Z-Index Logic
+  // Z-Index Logic:
+  // We rely strictly on DOM order (array order) for layering Groups vs Groups vs Nodes.
+  // We do NOT boost Z-index for selected Groups, as that would make them cover their own children (if children have lower/auto z-index).
+  // We only boost Z-index for selected Content Nodes or Stack Open to ensure they pop over peers if needed, 
+  // but since we reorder on click, even this might be redundant, but safe for Content Nodes.
+  
   let zIndex: number | undefined = undefined;
   
   if (data.isStackOpen) {
@@ -46,18 +36,15 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   } else if (!isGroup && selected) {
       zIndex = 100; // Boost selected content nodes slightly
   } else {
+      // Default level for Groups and Unselected Nodes.
+      // They will stack based on DOM order.
+      // We set a base z-index to ensure they sit above the background/grid/lines if those are lower.
       zIndex = 10; 
   }
 
-  // Apply Group visual styles directly on BaseNode to ensure updates render immediately.
-  // We use hexToRgba to make the user-selected solid color transparent (20% opacity).
-  const groupStyle: React.CSSProperties = isGroup ? {
-      backgroundColor: data.color ? hexToRgba(data.color, 0.2) : (isDark ? 'rgba(39, 39, 42, 0.5)' : 'rgba(228, 228, 231, 0.5)'),
-  } : {};
-
   return (
     <div 
-      className={`absolute flex flex-col group ${isGroup ? 'rounded-2xl transition-colors duration-200' : ''}`}
+      className={`absolute flex flex-col group`}
       style={{
         left: data.x,
         top: data.y,
@@ -65,8 +52,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         height: data.height,
         zIndex, 
         overflow: 'visible',
-        pointerEvents: isGroup && !selected ? 'auto' : 'auto',
-        ...groupStyle
+        pointerEvents: isGroup && !selected ? 'auto' : 'auto'
       }}
       onMouseDown={onMouseDown}
       onContextMenu={onContextMenu}
