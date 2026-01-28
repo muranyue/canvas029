@@ -159,8 +159,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       onClick={(e) => {
         e.stopPropagation();
         onClick();
-        // Close menu on mobile after selection
-        if (window.innerWidth < 768) setActiveMenu(null);
+        // Close menu immediately after selection (both Desktop and Mobile)
+        setActiveMenu(null);
       }}
     >
       <div className={`w-8 h-8 flex items-center justify-center border rounded-lg shadow-sm shrink-0 transition-colors ${active ? 'text-cyan-400 border-cyan-500/30' : (isDark ? 'bg-zinc-800 border-zinc-700 text-gray-400 group-hover:text-cyan-400' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:text-cyan-600')}`}>
