@@ -91,7 +91,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
             <div 
                 className={`absolute w-4 h-4 rounded-full border -right-2 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-crosshair hover:scale-125 transition-transform z-50 shadow-sm ${portBg}`}
                 onMouseDown={(e) => onConnectStart(e, 'source')}
-                onTouchStart={(e) => { e.preventDefault(); if (onConnectTouchStart) onConnectTouchStart(e, 'source'); }} // Mobile Connect
+                onTouchStart={(e) => onConnectTouchStart && onConnectTouchStart(e, 'source')} // Mobile Connect
             >
                     <span className={`text-[10px] leading-none select-none relative -top-[0.5px] ${portText}`}>+</span>
                     <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>

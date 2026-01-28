@@ -159,8 +159,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       onClick={(e) => {
         e.stopPropagation();
         onClick();
-        // Close menu immediately after selection (both Desktop and Mobile)
-        setActiveMenu(null);
+        // Close menu on mobile after selection
+        if (window.innerWidth < 768) setActiveMenu(null);
       }}
     >
       <div className={`w-8 h-8 flex items-center justify-center border rounded-lg shadow-sm shrink-0 transition-colors ${active ? 'text-cyan-400 border-cyan-500/30' : (isDark ? 'bg-zinc-800 border-zinc-700 text-gray-400 group-hover:text-cyan-400' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:text-cyan-600')}`}>
@@ -219,9 +219,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         title = "Add Node";
         content = (
           <>
-            <SubMenuItem icon={Icons.Video} label="Text to Video" desc="Veo 3, Sora 2" onClick={() => onAddNode(NodeType.TEXT_TO_VIDEO)} />
-            <SubMenuItem icon={Icons.Image} label="Text to Image" desc="Gemini 3, Imagen 3" onClick={() => onAddNode(NodeType.TEXT_TO_IMAGE)} />
-            <SubMenuItem icon={Icons.FileText} label="Creative Desc" desc="Prompt Assistant" onClick={() => onAddNode(NodeType.CREATIVE_DESC)} />
+            <SubMenuItem icon={Icons.Video} label="Text to Video" desc="Veo 3, Sora 2" onClick={() => { onAddNode(NodeType.TEXT_TO_VIDEO); setActiveMenu(null); }} />
+            <SubMenuItem icon={Icons.Image} label="Text to Image" desc="Gemini 3, Imagen 3" onClick={() => { onAddNode(NodeType.TEXT_TO_IMAGE); setActiveMenu(null); }} />
+            <SubMenuItem icon={Icons.FileText} label="Creative Desc" desc="Prompt Assistant" onClick={() => { onAddNode(NodeType.CREATIVE_DESC); setActiveMenu(null); }} />
           </>
         );
         break;
@@ -244,7 +244,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         content = (
           <>
             <SubMenuItem icon={Icons.Album} label="My Assets" onClick={() => {}} />
-            <SubMenuItem icon={Icons.Upload} label="Import Asset" onClick={onImportAsset} />
+            <SubMenuItem icon={Icons.Upload} label="Import Asset" onClick={() => { onImportAsset(); setActiveMenu(null); }} />
           </>
         );
         break;
@@ -265,7 +265,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div ref={menuRef} onTouchStart={(e) => e.stopPropagation()}>
+    <div ref={menuRef}>
         {/* Desktop Sidebar */}
         <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-[200] items-start">
             {/* Main Bar */}
