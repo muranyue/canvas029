@@ -159,7 +159,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
 
     return (
         <div 
-            className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
+            className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col nodrag ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()} // Prevent canvas zoom when scrolling inside input
         >
             <div 

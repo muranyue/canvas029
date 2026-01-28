@@ -127,7 +127,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
                  <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
                       <div className="relative group/input">
-                          <textarea className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar ${inputBg}`} placeholder="Enter image description..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} />
+                          <textarea className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar nodrag ${inputBg}`} placeholder="Enter image description..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} />
                       </div>
                       <div className="flex items-center justify-between gap-2 h-7">
                           <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />

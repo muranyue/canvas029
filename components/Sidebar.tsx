@@ -265,7 +265,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div ref={menuRef}>
+    <div ref={menuRef} onTouchStart={(e) => e.stopPropagation()}>
         {/* Desktop Sidebar */}
         <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-[200] items-start">
             {/* Main Bar */}

@@ -904,7 +904,7 @@ const CanvasWithSidebar: React.FC = () => {
   // --- Touch Event Handlers for Mobile Pan/Zoom ---
   const handleTouchStart = (e: React.TouchEvent) => {
       // Don't interfere if touching a UI element that should handle its own events
-      if ((e.target as HTMLElement).closest('button, input, .node-content')) return;
+      if ((e.target as HTMLElement).closest('button, input, .node-content, .nodrag')) return;
 
       if (e.touches.length === 1) {
           const touch = e.touches[0];
@@ -980,6 +980,9 @@ const CanvasWithSidebar: React.FC = () => {
 
   const handleTouchEnd = (e: React.TouchEvent) => {
       if (dragMode === 'CONNECT') {
+          // Prevent ghost clicks/mouse events which might immediately close the menu we're about to open
+          e.preventDefault();
+
           // Attempt to find drop target for connection
           const touch = e.changedTouches[0];
           const worldPos = screenToWorld(touch.clientX, touch.clientY);
@@ -1040,6 +1043,12 @@ const CanvasWithSidebar: React.FC = () => {
 
   const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
     e.stopPropagation();
+
+    // Fix for mobile: Allow interaction with inputs, buttons, and "nodrag" elements
+    if ((e.target as HTMLElement).closest('.nodrag, button, input, textarea, select, [contenteditable="true"]')) {
+        return;
+    }
+
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
     if (selectedConnectionId) setSelectedConnectionId(null);
@@ -1383,7 +1392,11 @@ const CanvasWithSidebar: React.FC = () => {
 
       // Centered toolbar logic using translateX
       return (
-          <div className="absolute z-[150] flex flex-col items-center pointer-events-none" style={{ left: pos.x, top: pos.y - 60, transform: 'translateX(-50%)' }}>
+          <div 
+              className="absolute z-[150] flex flex-col items-center pointer-events-none" 
+              style={{ left: pos.x, top: pos.y - 60, transform: 'translateX(-50%)' }}
+              onTouchStart={(e) => e.stopPropagation()}
+          >
               <div className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`}>
                   
                   <div className="relative border-r border-gray-500/20 pr-1.5 mr-1.5">
@@ -1446,7 +1459,12 @@ const CanvasWithSidebar: React.FC = () => {
   const renderContextMenu = () => {
     if (!contextMenu) return null;
     return (
-        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+        <div 
+            className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} 
+            style={{ left: contextMenu.x, top: contextMenu.y }} 
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+        >
             {contextMenu.type === 'NODE' && contextMenu.nodeId && (
                 <>
                     {contextMenu.nodeType === NodeType.GROUP ? (
@@ -1477,7 +1495,12 @@ const CanvasWithSidebar: React.FC = () => {
   const renderQuickAddMenu = () => {
     if (!quickAddMenu) return null;
     return (
-        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col animate-in fade-in zoom-in-95 duration-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: quickAddMenu.x, top: quickAddMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
+        <div 
+            className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col animate-in fade-in zoom-in-95 duration-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} 
+            style={{ left: quickAddMenu.x, top: quickAddMenu.y }} 
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+        >
             <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 ${isDark ? 'text-gray-500 border-zinc-800' : 'text-gray-400 border-gray-100'}`}>Add Node</div>
             <button className={`text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${isDark ? 'text-gray-300 hover:bg-zinc-800 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-black'}`} onClick={() => handleQuickAddNode(NodeType.TEXT_TO_IMAGE)}><Icons.Image size={14} className="text-cyan-400"/> Text to Image</button>
             <button className={`text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${isDark ? 'text-gray-300 hover:bg-zinc-800 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-black'}`} onClick={() => handleQuickAddNode(NodeType.TEXT_TO_VIDEO)}><Icons.Video size={14} className="text-cyan-400"/> Text to Video</button>
