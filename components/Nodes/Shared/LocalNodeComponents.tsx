@@ -16,7 +16,7 @@ export const LocalEditableTitle: React.FC<{ title: string; onUpdate: (newTitle: 
     const displayBg = isDark ? 'text-gray-300 hover:border-zinc-700 bg-[#1A1D21]/50' : 'text-gray-700 hover:border-gray-300 bg-white/50';
 
     return isEditing ? (
-        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} />
+        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold touch-auto`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} />
     ) : (
         <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} title={title}>{title}</div>
     );
@@ -99,7 +99,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
     return (
         <div className="relative h-full flex items-center" ref={ref}>
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors touch-manipulation ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
                 ) : (
@@ -110,8 +110,8 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
             </div>
 
             {isOpen && (
-                <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
-                    <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+                <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                    <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 touch-auto">
                         {options.map((opt: any) => {
                             const isGroup = typeof opt === 'object';
                             const label = isGroup ? opt.label : opt;
@@ -131,7 +131,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                             return (
                                 <div 
                                     key={label}
-                                    className={`relative px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between group/item cursor-pointer
+                                    className={`relative px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between group/item cursor-pointer touch-manipulation
                                         ${isDisabled 
                                             ? 'text-zinc-600 cursor-not-allowed opacity-50' 
                                             : (isSelected || (isGroup && isGroupHovered)
@@ -167,13 +167,13 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                             onMouseEnter={handleMouseEnterFlyout}
                             onMouseLeave={handleMouseLeave}
                         >
-                            <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1">
+                            <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1 touch-auto">
                                 {activeGroupItems.map((subItem: string) => {
                                     const isSubSelected = subItem === value;
                                     return (
                                         <div 
                                             key={subItem}
-                                            className={`px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between cursor-pointer mb-0.5
+                                            className={`px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between cursor-pointer mb-0.5 touch-manipulation
                                                 ${isSubSelected ? activeItem : optionHover}
                                                 ${!isSubSelected && isDark ? 'text-gray-300' : ''} 
                                             `}
@@ -211,7 +211,7 @@ export const LocalThumbnailItem = memo(({ src, index, isDark }: { src: string, i
 export const LocalInputThumbnails = memo(({ inputs, ready, isDark }: { inputs: string[], ready: boolean, isDark: boolean }) => {
     if (!inputs || inputs.length === 0) return null;
     return (
-       <div className="flex justify-center gap-2 pb-2 overflow-x-auto no-scrollbar min-h-[56px]">
+       <div className="flex justify-center gap-2 pb-2 overflow-x-auto no-scrollbar min-h-[56px] touch-auto">
            {inputs.slice(0, 8).map((src, i) => (
                ready ? <LocalThumbnailItem key={src + i} src={src} index={i} isDark={isDark} /> : <div key={i} className={`relative w-[48px] h-[48px] flex-shrink-0 border rounded-lg overflow-hidden shadow-sm ${isDark ? 'border-zinc-700 bg-black/40' : 'border-gray-300 bg-gray-100'}`}><div className={`absolute inset-0 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-200'}`} /></div>
            ))}
@@ -268,7 +268,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
 
     if (data.isStackOpen) {
         return (
-            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200">
+            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200 touch-auto overflow-x-auto no-scrollbar" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                 {sortedArtifacts.map((src, index) => {
                     const isMain = index === 0;
                     const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src) || data.type === 'TEXT_TO_VIDEO';

@@ -164,7 +164,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         >
             <div 
                 ref={divRef}
-                className={`w-full flex-1 p-3 text-xs font-sans leading-7 outline-none overflow-y-auto max-h-[120px] ${textColor} relative z-10 select-text cursor-text ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`w-full flex-1 p-3 text-xs font-sans leading-7 outline-none overflow-y-auto max-h-[120px] ${textColor} relative z-10 select-text cursor-text touch-auto ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
@@ -339,7 +339,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                <div className={`flex items-center gap-1 border rounded-lg p-1 shadow-xl backdrop-blur-md ${toolbarBg}`}>
                    {videoToolbarItems.map(item => {
                        const isDisabled = item.id === 'start_end' && isStartEndDisabled;
-                       const itemBaseClass = `flex items-center gap-1.5 px-2 py-1 rounded-md transition-all border border-transparent`;
+                       const itemBaseClass = `flex items-center gap-1.5 px-2 py-1 rounded-md transition-all border border-transparent touch-manipulation`;
                        let itemStateClass = isDisabled ? (isDark ? 'text-zinc-600 cursor-not-allowed opacity-50' : 'text-gray-300 cursor-not-allowed opacity-50') : (data.activeToolbarItem === item.id ? activeToolbarItemClass + ' shadow-sm cursor-pointer' : inactiveToolbarItemClass + ' cursor-pointer');
                        return (
                            <div key={item.id} className={`${itemBaseClass} ${itemStateClass}`} onClick={(e) => { e.stopPropagation(); if (!isDisabled) onToolbarAction?.(data.id, item.id); }}>
