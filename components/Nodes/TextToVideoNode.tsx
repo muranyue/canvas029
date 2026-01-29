@@ -335,7 +335,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     return (
       <>
         {isSelectedAndStable && showControls && (
-            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200">
+            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200" onTouchStart={(e) => e.stopPropagation()}>
                <div className={`flex items-center gap-1 border rounded-lg p-1 shadow-xl backdrop-blur-md ${toolbarBg}`}>
                    {videoToolbarItems.map(item => {
                        const isDisabled = item.id === 'start_end' && isStartEndDisabled;
@@ -352,7 +352,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         )}
         <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto">
            <div className="flex items-center gap-2 pl-1"><LocalEditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
-           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`}>
+           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onTouchStart={(e) => e.stopPropagation()}>
                <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }}><Icons.Maximize2 size={12} /></button>
                <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }}><Icons.Download size={12} /></button>
            </div>
@@ -371,7 +371,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
                {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
               <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`}>
                   
