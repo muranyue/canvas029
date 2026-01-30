@@ -279,9 +279,9 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[500px] max-w-[min(600px,calc(100vw-20px))] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
-                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border overflow-x-auto`}>
+                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
                       <div className="flex flex-col" data-interactive="true">
                           <ContentEditablePromptInput 
                               ref={inputRef}
@@ -317,7 +317,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               </div>
                           )}
                       </div>
-                      <div className="flex items-center justify-between gap-2 h-7 min-w-[460px]">
+                      <div className="flex items-center justify-between gap-2 h-7">
                           <div className="flex items-center gap-2">
                               <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
                               <div className={`w-px h-3 ${dividerColor}`}></div>

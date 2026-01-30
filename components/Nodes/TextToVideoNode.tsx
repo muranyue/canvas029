@@ -374,9 +374,9 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[550px] max-w-[min(650px,calc(100vw-20px))] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
                {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
-              <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border overflow-x-auto`}>
+              <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`}>
                   
                   {/* Start/End Mode Hint */}
                   {isStartEndActive && (
@@ -425,7 +425,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
 
                   <div className="h-px w-full my-1 opacity-50 bg-gradient-to-r from-transparent via-gray-500/20 to-transparent"></div>
 
-                  <div className="flex items-center justify-between gap-2 h-7 min-w-[510px]">
+                  <div className="flex items-center justify-between gap-2 h-7">
                        <div className="flex items-center gap-2">
                            <LocalCustomDropdown options={groupedVideoModels} value={data.model || 'Sora 2'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[130px]" isDark={isDark} />
                            <div className={`w-px h-3 ${dividerColor}`}></div>
