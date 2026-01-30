@@ -59,8 +59,6 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         overflow: 'visible',
         pointerEvents: isGroup && !selected ? 'auto' : 'auto'
       }}
-      onMouseDown={onMouseDown}
-      onTouchStart={onTouchStart} // Mobile Drag
       onContextMenu={onContextMenu}
     >
       {/* Selection Border - Groups handle their own selection border in GroupNode to encompass header */}
@@ -68,8 +66,16 @@ const BaseNode: React.FC<BaseNodeProps> = ({
           <div className={`absolute inset-0 pointer-events-none rounded-xl border-2 border-cyan-500/50 z-40 ${data.isStackOpen ? 'opacity-0' : 'opacity-100'}`}></div> 
       )}
 
+      {/* Drag Handle Area - Only this area triggers drag */}
+      <div 
+        className="absolute top-0 left-0 right-0 h-8 cursor-move z-50"
+        data-drag-handle="true"
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+      />
+
       {/* Main Content Area */}
-      <div className="relative w-full h-full">
+      <div className="relative w-full h-full pointer-events-auto">
           {children}
 
           {/* Connection Ports - Groups don't have ports */}

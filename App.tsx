@@ -1065,21 +1065,12 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
-    // Check if touch target is an interactive element (mobile optimization)
+    // Check if touch target is the drag handle
     const target = e.target as HTMLElement;
-    const isInteractive = target.closest('[data-interactive="true"]') || 
-                          target.tagName === 'INPUT' || 
-                          target.tagName === 'TEXTAREA' || 
-                          target.tagName === 'BUTTON' ||
-                          target.tagName === 'SELECT' ||
-                          target.isContentEditable ||
-                          target.closest('button') ||
-                          target.closest('input') ||
-                          target.closest('textarea') ||
-                          target.closest('[contenteditable="true"]');
+    const isDragHandle = target.closest('[data-drag-handle="true"]');
     
-    // If touching an interactive element, don't start dragging
-    if (isInteractive) {
+    // Only allow dragging from the drag handle area
+    if (!isDragHandle) {
       return;
     }
 
@@ -1167,6 +1158,15 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
+    // Check if mouse target is the drag handle
+    const target = e.target as HTMLElement;
+    const isDragHandle = target.closest('[data-drag-handle="true"]');
+    
+    // Only allow dragging from the drag handle area
+    if (!isDragHandle) {
+      return;
+    }
+
     e.stopPropagation();
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
