@@ -30,6 +30,72 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   const portText = isDark ? 'text-zinc-400' : 'text-gray-500';
   const isGroup = data.type === NodeType.GROUP;
 
+  // Filter touch events to exclude interactive areas
+  const handleTouchStartFiltered = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    
+    // Check if touching an interactive element
+    const isInteractive = target.closest('[data-interactive="true"]') ||
+                          target.closest('.absolute.top-full') ||
+                          target.closest('.absolute.bottom-full') ||
+                          target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.tagName === 'BUTTON' ||
+                          target.isContentEditable ||
+                          target.closest('button') ||
+                          target.closest('input') ||
+                          target.closest('textarea') ||
+                          target.closest('[contenteditable="true"]');
+    
+    // If touching interactive element, don't call parent handler
+    if (isInteractive) {
+      return;
+    }
+    
+    // Otherwise, call the parent handler
+    if (onTouchStart) {
+      onTouchStart(e);
+    }
+  };
+
+  const handleTouchEndFiltered = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    
+    const isInteractive = target.closest('[data-interactive="true"]') ||
+                          target.closest('.absolute.top-full') ||
+                          target.closest('.absolute.bottom-full') ||
+                          target.tagName === 'INPUT' ||
+                          target.tagName === 'TEXTAREA' ||
+                          target.tagName === 'BUTTON' ||
+                          target.closest('button') ||
+                          target.closest('input') ||
+                          target.closest('textarea');
+    
+    if (isInteractive) {
+      return;
+    }
+    
+    if (onTouchEnd) {
+      onTouchEnd(e);
+    }
+  };
+
+  const handleClickFiltered = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    
+    const isInteractive = target.closest('[data-interactive="true"]') ||
+                          target.closest('.absolute.top-full') ||
+                          target.closest('.absolute.bottom-full');
+    
+    if (isInteractive) {
+      return;
+    }
+    
+    if (onClick) {
+      onClick(e);
+    }
+  };
+
   // Z-Index Logic:
   // We rely strictly on DOM order (array order) for layering Groups vs Groups vs Nodes.
   // We do NOT boost Z-index for selected Groups, as that would make them cover their own children (if children have lower/auto z-index).
@@ -73,9 +139,9 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         className="relative w-full h-full pointer-events-auto"
         data-drag-handle="true"
         onMouseDown={onMouseDown}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onClick={onClick}
+        onTouchStart={handleTouchStartFiltered}
+        onTouchEnd={handleTouchEndFiltered}
+        onClick={handleClickFiltered}
       >
           {children}
 
