@@ -338,12 +338,12 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               </div>
                           )}
                       </div>
-                      <div className="flex md:flex-nowrap flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-2 overflow-x-auto md:overflow-x-visible">
                           <div className="flex items-center gap-2 flex-shrink-0">
                               <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
                               <div className={`w-px h-3 ${dividerColor}`}></div>
                           </div>
-                          <div className="flex items-center gap-1 flex-shrink-0" data-interactive="true">
+                          <div className="flex flex-wrap md:flex-nowrap items-center gap-1 flex-shrink-0" data-interactive="true">
                               <LocalCustomDropdown icon={Icons.Crop} options={supportedRatios} value={data.aspectRatio || '1:1'} onChange={handleRatioChange} isOpen={activeDropdown === 'ratio'} onToggle={() => setActiveDropdown(activeDropdown === 'ratio' ? null : 'ratio')} onClose={() => setActiveDropdown(null)} isDark={isDark} />
                               <LocalCustomDropdown icon={Icons.Monitor} options={supportedResolutions} value={data.resolution || '1k'} onChange={(val: any) => updateData(data.id, { resolution: val })} isOpen={activeDropdown === 'res'} onToggle={() => setActiveDropdown(activeDropdown === 'res' ? null : 'res')} onClose={() => setActiveDropdown(null)} disabledOptions={['1k', '2k', '4k'].filter(r => !supportedResolutions.includes(r))} isDark={isDark} />
                               <LocalCustomDropdown icon={Icons.Layers} options={[1, 2, 3, 4]} value={data.count || 1} onChange={(val: any) => updateData(data.id, { count: val })} isOpen={activeDropdown === 'count'} onToggle={() => setActiveDropdown(activeDropdown === 'count' ? null : 'count')} onClose={() => setActiveDropdown(null)} isDark={isDark} />
