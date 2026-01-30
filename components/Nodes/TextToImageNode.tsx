@@ -125,7 +125,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         {isSelectedAndStable && showControls && (
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
-                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
+                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`} onTouchStart={(e) => e.stopPropagation()}>
                       <div className="relative group/input">
                           <textarea 
                               className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar select-text cursor-text ${inputBg}`} 
