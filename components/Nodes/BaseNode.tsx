@@ -31,32 +31,32 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   let zIndex: number | undefined = undefined;
   
   if (data.isStackOpen) {
-      zIndex = 1000; // Highest priority
-  } else if (!isGroup && selected) {
-      zIndex = 100; // Boost selected content nodes slightly
+      zIndex = 1000; // Highest priority for open stacks
+  } else if (selected) {
+      zIndex = isGroup ? 5 : 1000; // Boost selected content nodes to ensure dropdowns are visible. Groups stay lower.
   } else {
-      zIndex = 10; 
+      zIndex = isGroup ? 1 : 10; 
   }
 
   // Enhanced handlers to prevent dragging when interacting with UI controls
   const handleInteractionStart = (e: React.MouseEvent | React.TouchEvent, handler: (e: any) => void) => {
       const target = e.target as HTMLElement;
       
-      // Expanded check for interactive elements including Tailwind classes
+      // Expanded check for interactive elements including Tailwind classes and specific behaviors
       const isInteractive = 
           ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A', 'VIDEO'].includes(target.tagName) ||
           target.closest('button') || 
           target.closest('.interactive') ||
           target.closest('.nodrag') ||
-          target.closest('.pointer-events-auto') || 
+          target.closest('.pointer-events-auto') || // Critical: catches explicit UI zones
           target.isContentEditable;
 
-      if (!isInteractive) {
-          handler(e);
-      } else {
-          // Critical for mobile: stop propagation immediately if it's an interactive element
-          // This prevents the parent BaseNode from initiating a drag or capture
+      if (isInteractive) {
+          // Critical for mobile: stop propagation immediately if it's an interactive element.
+          // This prevents the parent BaseNode from initiating a drag or capture.
           e.stopPropagation();
+      } else {
+          handler(e);
       }
   };
 

@@ -51,10 +51,19 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
     const [flyoutTop, setFlyoutTop] = useState<number>(0);
     const hoverTimeout = useRef<any>(null);
 
+    // Enhanced click outside listener for Mobile (touchstart)
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => { if (ref.current && !ref.current.contains(event.target as Node)) onClose(); };
-        if (isOpen) document.addEventListener('mousedown', handleClickOutside, true);
-        return () => document.removeEventListener('mousedown', handleClickOutside, true);
+        const handleClickOutside = (event: MouseEvent | TouchEvent) => { 
+            if (ref.current && !ref.current.contains(event.target as Node)) onClose(); 
+        };
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside, true);
+            document.addEventListener('touchstart', handleClickOutside, true);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside, true);
+            document.removeEventListener('touchstart', handleClickOutside, true);
+        };
     }, [isOpen, onClose]);
 
     useEffect(() => { if (!isOpen) { setHoveredGroup(null); } }, [isOpen]);
@@ -157,7 +166,20 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                     onMouseLeave={handleMouseLeave}
                                     onClick={(e) => { 
                                         e.stopPropagation(); 
-                                        if (!isGroup && !isDisabled) { onChange(label); onClose(); }
+                                        if (isGroup) {
+                                            // Toggle group on click for mobile/touch
+                                            const newGroup = hoveredGroup === label ? null : label;
+                                            setHoveredGroup(newGroup);
+                                            // Recalculate top if opening
+                                            if (newGroup && listRef.current) {
+                                                const listRect = listRef.current.getBoundingClientRect();
+                                                const itemRect = e.currentTarget.getBoundingClientRect();
+                                                setFlyoutTop(itemRect.top - listRect.top);
+                                            }
+                                        } else if (!isDisabled) { 
+                                            onChange(label); 
+                                            onClose(); 
+                                        }
                                     }}
                                     onTouchStart={(e) => e.stopPropagation()}
                                 >
@@ -278,12 +300,12 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
             }
         };
         if (data.isStackOpen) {
-            document.addEventListener('mousedown', handleClickOutside as any);
-            document.addEventListener('touchstart', handleClickOutside as any);
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('touchstart', handleClickOutside);
         }
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside as any);
-            document.removeEventListener('touchstart', handleClickOutside as any);
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
         };
     }, [data.isStackOpen, data.id, updateData]);
 
