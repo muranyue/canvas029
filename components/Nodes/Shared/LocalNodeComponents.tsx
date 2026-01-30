@@ -117,7 +117,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
     return (
         <div className="relative h-full flex items-center" ref={ref} data-interactive="true">
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }} data-interactive="true">
+            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }} data-interactive="true">
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
                 ) : (

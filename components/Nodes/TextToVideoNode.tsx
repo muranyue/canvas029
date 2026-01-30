@@ -161,7 +161,6 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         <div 
             className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()} // Prevent canvas zoom when scrolling inside input
-            onTouchStart={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             data-interactive="true"
         >
@@ -172,6 +171,13 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onTouchStart={(e) => {
+                    e.stopPropagation();
+                    // 确保输入框获得焦点
+                    if (divRef.current && document.activeElement !== divRef.current) {
+                        divRef.current.focus();
+                    }
+                }}
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text' }}
             />
@@ -338,7 +344,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     return (
       <>
         {isSelectedAndStable && showControls && (
-            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200" onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200" data-interactive="true">
                <div className={`flex items-center gap-1 border rounded-lg p-1 shadow-xl backdrop-blur-md ${toolbarBg}`}>
                    {videoToolbarItems.map(item => {
                        const isDisabled = item.id === 'start_end' && isStartEndDisabled;
@@ -353,9 +359,9 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                </div>
             </div>
         )}
-        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
+        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
            <div className="flex items-center gap-2 pl-1"><LocalEditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
-           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
+           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12} /></button>
                <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDownload?.(data.id); }} data-interactive="true"><Icons.Download size={12} /></button>
            </div>
@@ -374,7 +380,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
               <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`}>
                   
