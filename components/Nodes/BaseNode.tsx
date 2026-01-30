@@ -7,12 +7,14 @@ interface BaseNodeProps {
   data: NodeData;
   selected: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
+  onClick?: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onConnectStart: (e: React.MouseEvent, type: 'source' | 'target') => void;
   onPortMouseUp?: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
   onResizeStart?: (e: React.MouseEvent, direction: string) => void;
   // Touch Events
   onTouchStart?: (e: React.TouchEvent) => void;
+  onTouchEnd?: (e: React.TouchEvent) => void;
   onConnectTouchStart?: (e: React.TouchEvent, type: 'source' | 'target') => void;
   children: React.ReactNode;
   scale: number;
@@ -20,8 +22,8 @@ interface BaseNodeProps {
 }
 
 const BaseNode: React.FC<BaseNodeProps> = ({ 
-  data, selected, onMouseDown, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, 
-  onTouchStart, onConnectTouchStart, isDark = true
+  data, selected, onMouseDown, onClick, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, 
+  onTouchStart, onTouchEnd, onConnectTouchStart, isDark = true
 }) => {
   
   const portBg = isDark ? 'bg-[#0B0C0E] border-zinc-500' : 'bg-white border-gray-400';
@@ -66,16 +68,15 @@ const BaseNode: React.FC<BaseNodeProps> = ({
           <div className={`absolute inset-0 pointer-events-none rounded-xl border-2 border-cyan-500/50 z-40 ${data.isStackOpen ? 'opacity-0' : 'opacity-100'}`}></div> 
       )}
 
-      {/* Drag Handle Area - Only this area triggers drag */}
+      {/* Main Content Area - This is the drag handle */}
       <div 
-        className="absolute top-0 left-0 right-0 h-8 cursor-move z-50"
+        className="relative w-full h-full pointer-events-auto"
         data-drag-handle="true"
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
-      />
-
-      {/* Main Content Area */}
-      <div className="relative w-full h-full pointer-events-auto">
+        onTouchEnd={onTouchEnd}
+        onClick={onClick}
+      >
           {children}
 
           {/* Connection Ports - Groups don't have ports */}

@@ -1065,11 +1065,32 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
-    // Check if touch target is the drag handle
+    // Check if touch target is in an excluded area (control panel, title, or interactive elements)
     const target = e.target as HTMLElement;
+    
+    // Exclude control panels (below node), titles (above node), and interactive elements
+    const isExcluded = target.closest('[data-interactive="true"]') ||
+                       target.closest('.absolute.top-full') ||  // Control panel below
+                       target.closest('.absolute.bottom-full') || // Title/toolbar above
+                       target.tagName === 'INPUT' || 
+                       target.tagName === 'TEXTAREA' || 
+                       target.tagName === 'BUTTON' ||
+                       target.tagName === 'SELECT' ||
+                       target.isContentEditable ||
+                       target.closest('button') ||
+                       target.closest('input') ||
+                       target.closest('textarea') ||
+                       target.closest('[contenteditable="true"]');
+    
+    // If touching an excluded area, don't start dragging
+    if (isExcluded) {
+      return;
+    }
+
+    // Check if we're touching the main node content area (drag handle)
     const isDragHandle = target.closest('[data-drag-handle="true"]');
     
-    // Only allow dragging from the drag handle area
+    // Only proceed if touching the drag handle (main node area)
     if (!isDragHandle) {
       return;
     }
@@ -1157,12 +1178,77 @@ const CanvasWithSidebar: React.FC = () => {
     }
   };
 
-  const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
-    // Check if mouse target is the drag handle
+  const handleNodeTouchEnd = (e: React.TouchEvent, id: string) => {
+    // If we didn't actually drag (just a tap), select the node
+    if (dragMode === 'NONE' || dragMode === 'DRAG_NODE') {
+      const target = e.target as HTMLElement;
+      
+      // Check if tap is on excluded area
+      const isExcluded = target.closest('[data-interactive="true"]') ||
+                         target.closest('.absolute.top-full') ||
+                         target.closest('.absolute.bottom-full') ||
+                         target.tagName === 'INPUT' || 
+                         target.tagName === 'TEXTAREA' || 
+                         target.tagName === 'BUTTON' ||
+                         target.closest('button') ||
+                         target.closest('input') ||
+                         target.closest('textarea');
+      
+      if (!isExcluded) {
+        // Simple tap to select
+        const isAlreadySelected = selectedNodeIds.has(id);
+        if (!isAlreadySelected) {
+          const newSelection = new Set<string>();
+          newSelection.add(id);
+          setSelectedNodeIds(newSelection);
+        }
+      }
+    }
+  };
+
+  const handleNodeClick = (e: React.MouseEvent, id: string) => {
+    // Handle simple click to select (when not dragging)
     const target = e.target as HTMLElement;
+    
+    const isExcluded = target.closest('[data-interactive="true"]') ||
+                       target.closest('.absolute.top-full') ||
+                       target.closest('.absolute.bottom-full');
+    
+    if (!isExcluded) {
+      const isAlreadySelected = selectedNodeIds.has(id);
+      if (!isAlreadySelected && dragMode === 'NONE') {
+        const newSelection = new Set<string>();
+        newSelection.add(id);
+        setSelectedNodeIds(newSelection);
+      }
+    }
+  };
+
+  const handleNodeMouseDown = (e: React.MouseEvent, id: string) => {
+    // Check if mouse target is in an excluded area
+    const target = e.target as HTMLElement;
+    
+    // Exclude control panels, titles, and interactive elements
+    const isExcluded = target.closest('[data-interactive="true"]') ||
+                       target.closest('.absolute.top-full') ||
+                       target.closest('.absolute.bottom-full') ||
+                       target.tagName === 'INPUT' || 
+                       target.tagName === 'TEXTAREA' || 
+                       target.tagName === 'BUTTON' ||
+                       target.tagName === 'SELECT' ||
+                       target.isContentEditable ||
+                       target.closest('button') ||
+                       target.closest('input') ||
+                       target.closest('textarea') ||
+                       target.closest('[contenteditable="true"]');
+    
+    if (isExcluded) {
+      return;
+    }
+
+    // Check if we're clicking the main node content area
     const isDragHandle = target.closest('[data-drag-handle="true"]');
     
-    // Only allow dragging from the drag handle area
     if (!isDragHandle) {
       return;
     }
@@ -1610,7 +1696,9 @@ const CanvasWithSidebar: React.FC = () => {
                         data={node}
                         selected={selectedNodeIds.has(node.id)}
                         onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+                        onClick={(e) => handleNodeClick(e, node.id)}
                         onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
+                        onTouchEnd={(e) => handleNodeTouchEnd(e, node.id)}
                         onContextMenu={(e) => handleNodeContextMenu(e, node.id, node.type)}
                         onConnectStart={(e, type) => handleConnectStart(e, node.id, type)}
                         onConnectTouchStart={(e, type) => handleConnectTouchStart(e, node.id, type)}
