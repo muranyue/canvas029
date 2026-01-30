@@ -446,12 +446,12 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
 
                   <div className="h-px w-full my-1 opacity-50 bg-gradient-to-r from-transparent via-gray-500/20 to-transparent"></div>
 
-                  <div className="flex items-center justify-between gap-2 h-7 overflow-x-auto overflow-y-hidden">
+                  <div className="flex items-center justify-between gap-2 h-7 overflow-x-auto md:overflow-x-visible overflow-y-hidden">
                        <div className="flex items-center gap-2 flex-shrink-0">
                            <LocalCustomDropdown options={groupedVideoModels} value={data.model || 'Sora 2'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[130px]" isDark={isDark} />
                            <div className={`w-px h-3 ${dividerColor}`}></div>
                        </div>
-                       <div className="flex items-center gap-1 flex-shrink-0" data-interactive="true">
+                       <div className="flex flex-wrap md:flex-nowrap items-center gap-1 flex-shrink-0" data-interactive="true">
                           <LocalCustomDropdown icon={Icons.Crop} options={ratioOptions} value={data.aspectRatio || '16:9'} onChange={handleRatioChange} isOpen={activeDropdown === 'ratio'} onToggle={() => setActiveDropdown(activeDropdown === 'ratio' ? null : 'ratio')} onClose={() => setActiveDropdown(null)} disabledOptions={constraints.disabledRatios} isDark={isDark} />
                           <LocalCustomDropdown icon={Icons.Monitor} options={resOptions} value={displayResValue || '720p'} onChange={(val: any) => updateData(data.id, { resolution: val })} isOpen={activeDropdown === 'res'} onToggle={() => setActiveDropdown(activeDropdown === 'res' ? null : 'res')} onClose={() => setActiveDropdown(null)} disabledOptions={constraints.disabledRes} isDark={isDark} />
                           <LocalCustomDropdown icon={Icons.Clock} options={durOptions} value={data.duration || '5s'} onChange={(val: any) => updateData(data.id, { duration: val })} isOpen={activeDropdown === 'duration'} onToggle={() => setActiveDropdown(activeDropdown === 'duration' ? null : 'duration')} onClose={() => setActiveDropdown(null)} disabledOptions={constraints.disabledDurations} isDark={isDark} />
