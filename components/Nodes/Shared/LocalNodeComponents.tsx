@@ -16,9 +16,9 @@ export const LocalEditableTitle: React.FC<{ title: string; onUpdate: (newTitle: 
     const displayBg = isDark ? 'text-gray-300 hover:border-zinc-700 bg-[#1A1D21]/50' : 'text-gray-700 hover:border-gray-300 bg-white/50';
 
     return isEditing ? (
-        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold select-text cursor-text`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
+        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold select-text cursor-text pointer-events-auto`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
     ) : (
-        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title}>{title}</div>
+        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px] pointer-events-auto`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title}>{title}</div>
     );
 };
 
@@ -98,8 +98,13 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
         : (isDark ? 'border-zinc-500 group-hover:border-zinc-300' : 'border-gray-400 group-hover:border-gray-600');
 
     return (
-        <div className="relative h-full flex items-center" ref={ref}>
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="relative h-full flex items-center pointer-events-auto" ref={ref}>
+            <div 
+                className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} 
+                onClick={(e) => { e.stopPropagation(); onToggle(); }} 
+                onTouchStart={(e) => e.stopPropagation()} 
+                onMouseDown={(e) => e.stopPropagation()}
+            >
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
                 ) : (
@@ -110,7 +115,12 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
             </div>
 
             {isOpen && (
-                <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+                <div 
+                    className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[1000] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} 
+                    onMouseDown={(e) => e.stopPropagation()} 
+                    onWheel={(e) => e.stopPropagation()} 
+                    onTouchStart={(e) => e.stopPropagation()}
+                >
                     <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                         {options.map((opt: any) => {
                             const isGroup = typeof opt === 'object';
@@ -163,7 +173,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                     </div>
                     {hoveredGroup && activeGroupItems.length > 0 && (
                         <div 
-                            className={`absolute left-full ml-1.5 w-[130px] ${flyoutBg} border rounded-lg shadow-2xl py-1 z-[110] animate-in fade-in slide-in-from-left-2 duration-150 before:absolute before:-left-4 before:top-0 before:h-full before:w-4 before:bg-transparent`}
+                            className={`absolute left-full ml-1.5 w-[130px] ${flyoutBg} border rounded-lg shadow-2xl py-1 z-[1100] animate-in fade-in slide-in-from-left-2 duration-150 before:absolute before:-left-4 before:top-0 before:h-full before:w-4 before:bg-transparent`}
                             style={{ top: flyoutTop }}
                             onMouseEnter={handleMouseEnterFlyout}
                             onMouseLeave={handleMouseLeave}
@@ -262,9 +272,19 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
     const showBadge = !data.isStackOpen && artifacts.length > 1;
 
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => { if (data.isStackOpen && stackRef.current && !stackRef.current.contains(event.target as Node)) updateData(data.id, { isStackOpen: false }); };
-        if (data.isStackOpen) document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        const handleClickOutside = (event: MouseEvent | TouchEvent) => { 
+            if (data.isStackOpen && stackRef.current && !stackRef.current.contains(event.target as Node)) {
+                 updateData(data.id, { isStackOpen: false });
+            }
+        };
+        if (data.isStackOpen) {
+            document.addEventListener('mousedown', handleClickOutside as any);
+            document.addEventListener('touchstart', handleClickOutside as any);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside as any);
+            document.removeEventListener('touchstart', handleClickOutside as any);
+        };
     }, [data.isStackOpen, data.id, updateData]);
 
     useEffect(() => { if (!selected && data.isStackOpen) updateData(data.id, { isStackOpen: false }); }, [selected, data.isStackOpen, data.id, updateData]);

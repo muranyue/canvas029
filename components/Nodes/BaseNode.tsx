@@ -41,16 +41,22 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   // Enhanced handlers to prevent dragging when interacting with UI controls
   const handleInteractionStart = (e: React.MouseEvent | React.TouchEvent, handler: (e: any) => void) => {
       const target = e.target as HTMLElement;
-      // Check if target is an interactive element that should block dragging
+      
+      // Expanded check for interactive elements including Tailwind classes
       const isInteractive = 
           ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A', 'VIDEO'].includes(target.tagName) ||
           target.closest('button') || 
           target.closest('.interactive') ||
           target.closest('.nodrag') ||
+          target.closest('.pointer-events-auto') || 
           target.isContentEditable;
 
       if (!isInteractive) {
           handler(e);
+      } else {
+          // Critical for mobile: stop propagation immediately if it's an interactive element
+          // This prevents the parent BaseNode from initiating a drag or capture
+          e.stopPropagation();
       }
   };
 
