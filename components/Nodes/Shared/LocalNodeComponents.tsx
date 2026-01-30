@@ -18,7 +18,23 @@ export const LocalEditableTitle: React.FC<{ title: string; onUpdate: (newTitle: 
     return isEditing ? (
         <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold select-text cursor-text pointer-events-auto`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
     ) : (
-        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px] pointer-events-auto`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title}>{title}</div>
+        <div 
+            className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px] pointer-events-auto`} 
+            onClick={(e) => {
+                // Mobile Support: Single click to edit on small screens
+                if (window.innerWidth < 768) {
+                    e.stopPropagation();
+                    setIsEditing(true);
+                    setEditValue(title);
+                }
+            }}
+            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} 
+            onMouseDown={(e) => e.stopPropagation()} 
+            onTouchStart={(e) => e.stopPropagation()} 
+            title={title}
+        >
+            {title}
+        </div>
     );
 };
 
@@ -115,8 +131,8 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                     e.stopPropagation(); 
                     onToggle(); 
                 }} 
-                // Removed explicit onTouchStart here to allow click simulation to complete
-                onMouseDown={(e) => e.stopPropagation()}
+                // Enhanced robust pointer event stop
+                onPointerDown={(e) => e.stopPropagation()}
             >
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
@@ -130,9 +146,8 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
             {isOpen && (
                 <div 
                     className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[2000] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} 
-                    onMouseDown={(e) => e.stopPropagation()} 
+                    onPointerDown={(e) => e.stopPropagation()} 
                     onWheel={(e) => e.stopPropagation()} 
-                    onTouchStart={(e) => e.stopPropagation()}
                 >
                     <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                         {options.map((opt: any) => {
@@ -202,7 +217,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                             style={{ top: flyoutTop }}
                             onMouseEnter={handleMouseEnterFlyout}
                             onMouseLeave={handleMouseLeave}
-                            onTouchStart={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
                         >
                             <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1">
                                 {activeGroupItems.map((subItem: string) => {
