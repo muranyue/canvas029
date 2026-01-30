@@ -28,38 +28,24 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   const portText = isDark ? 'text-zinc-400' : 'text-gray-500';
   const isGroup = data.type === NodeType.GROUP;
 
+  // Z-Index Logic:
+  // We rely strictly on DOM order (array order) for layering Groups vs Groups vs Nodes.
+  // We do NOT boost Z-index for selected Groups, as that would make them cover their own children (if children have lower/auto z-index).
+  // We only boost Z-index for selected Content Nodes or Stack Open to ensure they pop over peers if needed, 
+  // but since we reorder on click, even this might be redundant, but safe for Content Nodes.
+  
   let zIndex: number | undefined = undefined;
   
   if (data.isStackOpen) {
-      zIndex = 1000; // Highest priority for open stacks
-  } else if (selected) {
-      zIndex = isGroup ? 5 : 1000; // Boost selected content nodes to ensure dropdowns are visible. Groups stay lower.
+      zIndex = 1000; // Highest priority
+  } else if (!isGroup && selected) {
+      zIndex = 100; // Boost selected content nodes slightly
   } else {
-      zIndex = isGroup ? 1 : 10; 
+      // Default level for Groups and Unselected Nodes.
+      // They will stack based on DOM order.
+      // We set a base z-index to ensure they sit above the background/grid/lines if those are lower.
+      zIndex = 10; 
   }
-
-  // Enhanced handlers to prevent dragging when interacting with UI controls
-  const handleInteractionStart = (e: React.MouseEvent | React.TouchEvent, handler: (e: any) => void) => {
-      const target = e.target as HTMLElement;
-      
-      // Expanded check for interactive elements including Tailwind classes and specific behaviors
-      const isInteractive = 
-          ['BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'A', 'VIDEO'].includes(target.tagName) ||
-          target.closest('button') || 
-          target.closest('.interactive') ||
-          target.closest('.nodrag') ||
-          target.closest('.pointer-events-auto') || // Critical: catches explicit UI zones
-          target.isContentEditable;
-
-      if (isInteractive) {
-          // Critical for mobile: stop propagation immediately if it's an interactive element.
-          // This prevents the parent BaseNode from initiating a drag or capture.
-          // We DO NOT call preventDefault() here to allow focus events (keyboard) and click events to fire.
-          e.stopPropagation();
-      } else {
-          handler(e);
-      }
-  };
 
   return (
     <div 
@@ -73,8 +59,8 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         overflow: 'visible',
         pointerEvents: isGroup && !selected ? 'auto' : 'auto'
       }}
-      onMouseDown={(e) => handleInteractionStart(e, onMouseDown)}
-      onTouchStart={(e) => handleInteractionStart(e, onTouchStart || (() => {}))}
+      onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart} // Mobile Drag
       onContextMenu={onContextMenu}
     >
       {/* Selection Border - Groups handle their own selection border in GroupNode to encompass header */}
@@ -94,7 +80,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
               className={`absolute w-4 h-4 rounded-full border -left-2 top-1/2 -translate-y-1/2 flex items-center justify-center cursor-crosshair hover:scale-125 transition-transform z-50 shadow-sm ${portBg}`}
               onMouseDown={(e) => e.stopPropagation()} // Prevent node drag
               onMouseUp={(e) => onPortMouseUp && onPortMouseUp(e, data.id, 'target')} // Handle drop
-              onTouchStart={(e) => e.stopPropagation()}
+              // Mobile: No separate touchstart needed for input port usually, drop is handled by element detection or geometry
             >
                 <Icons.Plus size={10} strokeWidth={3} className={portText} />
                 <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>
@@ -118,7 +104,6 @@ const BaseNode: React.FC<BaseNodeProps> = ({
           <div 
               className="absolute -right-1 -bottom-1 w-6 h-6 cursor-se-resize z-50 flex items-end justify-end p-1 opacity-0 group-hover:opacity-100 transition-opacity"
               onMouseDown={(e) => onResizeStart && onResizeStart(e, 'SE')}
-              onTouchStart={(e) => { e.stopPropagation(); /* Mobile Resize TODO */ }}
           >
               <div className={`w-2 h-2 border-r-2 border-b-2 ${isDark ? (isGroup ? 'border-zinc-500' : 'border-zinc-400') : (isGroup ? 'border-gray-500' : 'border-gray-400')}`}></div>
           </div>

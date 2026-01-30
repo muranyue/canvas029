@@ -22,21 +22,15 @@ export const MediaStack: React.FC<MediaStackProps> = ({
     const sortedArtifacts = currentSrc ? [currentSrc, ...artifacts.filter(a => a !== currentSrc)] : artifacts;
     const showBadge = !data.isStackOpen && artifacts.length > 1;
 
-    // Handle click outside to close stack - supports both mouse and touch
+    // Handle click outside to close stack
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+        const handleClickOutside = (event: MouseEvent) => {
             if (data.isStackOpen && stackRef.current && !stackRef.current.contains(event.target as Node)) {
                  updateData(data.id, { isStackOpen: false });
             }
         };
-        if (data.isStackOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-            document.addEventListener('touchstart', handleClickOutside);
-        }
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-            document.removeEventListener('touchstart', handleClickOutside);
-        };
+        if (data.isStackOpen) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [data.isStackOpen, data.id, updateData]);
 
     // Close stack when deselected
@@ -46,7 +40,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
 
     if (data.isStackOpen) {
         return (
-            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200" onTouchStart={(e) => e.stopPropagation()}>
                 {sortedArtifacts.map((src, index) => {
                     const isMain = index === 0;
                     return (
@@ -63,12 +57,12 @@ export const MediaStack: React.FC<MediaStackProps> = ({
                            
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">
                                {!isMain && (
-                                   <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); const update = type === 'image' ? { imageSrc: src } : { videoSrc: src }; updateData(data.id, { ...update, isStackOpen: false }); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                                   <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); const update = type === 'image' ? { imageSrc: src } : { videoSrc: src }; updateData(data.id, { ...update, isStackOpen: false }); }}>
                                        <Icons.Check size={10} className="text-cyan-400" /><span>Main</span>
                                    </button>
                                )}
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Maximize2 size={12}/></button>
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src, type); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Download size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }}><Icons.Maximize2 size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src, type); }}><Icons.Download size={12}/></button>
                            </div>
                            
                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[9px] text-white font-mono border border-white/10 select-none">
@@ -78,7 +72,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
                     );
                 })}
                 <div className="flex flex-col justify-center h-full pl-2 pr-6">
-                    <button className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`} onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: false }); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.X size={20} /></button>
+                    <button className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`} onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: false }); }}><Icons.X size={20} /></button>
                 </div>
             </div>
         );
@@ -96,7 +90,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
                currentSrc && <img src={currentSrc} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
            )}
            {showBadge && (
-               <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+               <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()}>
                    <Icons.Layers size={10} className="text-cyan-400"/>
                    <span className="font-bold tabular-nums">{artifacts.length}</span>
                    <Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" />

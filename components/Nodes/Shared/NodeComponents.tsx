@@ -135,13 +135,13 @@ export const CustomDropdown = ({
 
     return (
         <div className="relative h-full flex items-center" ref={ref}>
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()}>
                 {Icon && <Icon size={13} className={`transition-colors ${isOpen ? 'text-cyan-400' : iconColor}`} />}
                 <span className={`text-[10px] font-medium transition-colors select-none ${isOpen ? (isDark ? 'text-gray-200' : 'text-gray-900') : (isDark ? 'text-zinc-400 group-hover:text-zinc-200' : 'text-gray-500 group-hover:text-gray-700')} ${Icon ? 'min-w-[16px] text-center' : 'max-w-[70px] truncate'}`}>{value}</span>
                 {!Icon && <Icons.ChevronRight size={10} className={`transition-all duration-200 ${isOpen ? 'rotate-[-90deg] text-cyan-400' : `rotate-90 ${isDark ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-gray-400 group-hover:text-gray-600'}`}`} />}
             </div>
             {isOpen && (
-                <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[80px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 custom-scrollbar`} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[80px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 custom-scrollbar`} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {options.map((opt: any) => {
                         const isDisabled = disabledOptions.includes(opt);
                         return (
@@ -169,8 +169,8 @@ export const EditableTitle: React.FC<{ title: string; onUpdate: (newTitle: strin
     const displayBg = isDark ? 'text-gray-300 hover:border-zinc-700 bg-[#1A1D21]/50' : 'text-gray-700 hover:border-gray-300 bg-white/50';
 
     return isEditing ? (
-        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} />
+        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
     ) : (
-        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} title={title}>{title}</div>
+        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title}>{title}</div>
     );
 };

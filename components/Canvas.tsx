@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { NodeData, NodeType, Connection, CanvasTransform, Point, DragMode } from '../types';
 import BaseNode from './Nodes/BaseNode';
@@ -374,19 +373,6 @@ const Canvas: React.FC = () => {
                         data={node}
                         selected={selectedNodeIds.has(node.id)}
                         onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                        onTouchStart={(e) => {
-                            // Map touch events to mouse selection logic for mobile support
-                            if (e.touches.length === 1) {
-                                const touch = e.touches[0];
-                                handleNodeMouseDown({ 
-                                    clientX: touch.clientX, 
-                                    clientY: touch.clientY, 
-                                    stopPropagation: () => e.stopPropagation(),
-                                    shiftKey: false,
-                                    button: 0
-                                } as unknown as React.MouseEvent, node.id);
-                            }
-                        }}
                         scale={transform.k}
                         onConnectStart={(e, type) => handleConnectStart(e, node.id, type)}
                         onContextMenu={(e) => e.preventDefault()}
