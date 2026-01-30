@@ -102,11 +102,11 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
 
     return (
       <>
-        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onTouchStart={(e) => e.stopPropagation()}>
+        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
            <div className="flex items-center gap-2 pl-1"><LocalEditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
            <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`}>
-               <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchStart={(e) => e.stopPropagation()}><Icons.Maximize2 size={12} /></button>
-               <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchStart={(e) => e.stopPropagation()}><Icons.Download size={12} /></button>
+               <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Maximize2 size={12} /></button>
+               <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Download size={12} /></button>
            </div>
         </div>
         
@@ -125,7 +125,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         {isSelectedAndStable && showControls && (
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
-                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`} onTouchStart={(e) => e.stopPropagation()}>
+                 <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                       <div className="relative group/input">
                           <textarea 
                               className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar select-text cursor-text ${inputBg}`} 
@@ -134,6 +134,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               onChange={(e) => updateData(data.id, { prompt: e.target.value })} 
                               onWheel={(e) => e.stopPropagation()} 
                               onTouchStart={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
                           />
                       </div>
                       <div className="flex items-center justify-between gap-2 h-7">
@@ -150,11 +151,12 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                                   title={canOptimize ? `Prompt Optimization: ${data.promptOptimize ? 'ON' : 'OFF'}` : 'Prompt Optimization not supported'}
                                   disabled={!canOptimize}
                                   onTouchStart={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
                               >
                                   <Icons.Sparkles size={13} fill={data.promptOptimize && canOptimize ? "currentColor" : "none"} />
                               </button>
                           </div>
-                          <button onClick={() => onGenerate(data.id)} onTouchStart={(e) => e.stopPropagation()} className={`ml-auto h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 whitespace-nowrap ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'}>
+                          <button onClick={() => onGenerate(data.id)} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} className={`ml-auto h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 whitespace-nowrap ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'}>
                               {data.isLoading ? <Icons.Loader2 className="animate-spin" size={12}/> : <Icons.Wand2 size={12} />}<span>Generate</span>
                           </button>
                       </div>

@@ -162,6 +162,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()} // Prevent canvas zoom when scrolling inside input
             onTouchStart={(e) => e.stopPropagation()} // Prevent canvas drag on mobile
+            onMouseDown={(e) => e.stopPropagation()} // Prevent canvas drag on desktop/emulated mouse
         >
             <div 
                 ref={divRef}
@@ -336,14 +337,14 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     return (
       <>
         {isSelectedAndStable && showControls && (
-            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200" onTouchStart={(e) => e.stopPropagation()}>
+            <div className="absolute bottom-full left-0 w-full mb-12 flex items-center px-1 pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-200" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                <div className={`flex items-center gap-1 border rounded-lg p-1 shadow-xl backdrop-blur-md ${toolbarBg}`}>
                    {videoToolbarItems.map(item => {
                        const isDisabled = item.id === 'start_end' && isStartEndDisabled;
                        const itemBaseClass = `flex items-center gap-1.5 px-2 py-1 rounded-md transition-all border border-transparent`;
                        let itemStateClass = isDisabled ? (isDark ? 'text-zinc-600 cursor-not-allowed opacity-50' : 'text-gray-300 cursor-not-allowed opacity-50') : (data.activeToolbarItem === item.id ? activeToolbarItemClass + ' shadow-sm cursor-pointer' : inactiveToolbarItemClass + ' cursor-pointer');
                        return (
-                           <div key={item.id} className={`${itemBaseClass} ${itemStateClass}`} onClick={(e) => { e.stopPropagation(); if (!isDisabled) onToolbarAction?.(data.id, item.id); }} onTouchStart={(e) => e.stopPropagation()}>
+                           <div key={item.id} className={`${itemBaseClass} ${itemStateClass}`} onClick={(e) => { e.stopPropagation(); if (!isDisabled) onToolbarAction?.(data.id, item.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                                <item.icon size={11} /><span className="text-[10px] font-bold">{item.label}</span>
                            </div>
                        );
@@ -351,11 +352,11 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                </div>
             </div>
         )}
-        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onTouchStart={(e) => e.stopPropagation()}>
+        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
            <div className="flex items-center gap-2 pl-1"><LocalEditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
            <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`}>
-               <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchStart={(e) => e.stopPropagation()}><Icons.Maximize2 size={12} /></button>
-               <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchStart={(e) => e.stopPropagation()}><Icons.Download size={12} /></button>
+               <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Maximize2 size={12} /></button>
+               <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}><Icons.Download size={12} /></button>
            </div>
         </div>
         
@@ -374,7 +375,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         {isSelectedAndStable && showControls && (
           <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
                {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
-              <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`} onTouchStart={(e) => e.stopPropagation()}>
+              <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                   
                   {/* Start/End Mode Hint */}
                   {isStartEndActive && (
@@ -404,6 +405,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                                           key={i}
                                           onClick={() => insertImageToken(i)}
                                           onTouchStart={(e) => e.stopPropagation()}
+                                          onMouseDown={(e) => e.stopPropagation()}
                                           className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
                                               isDark 
                                                 ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
@@ -437,11 +439,12 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                               title={canOptimize ? `Prompt Optimization: ${data.promptOptimize ? 'ON' : 'OFF'}` : 'Prompt Optimization not supported'}
                               disabled={!canOptimize}
                               onTouchStart={(e) => e.stopPropagation()}
+                              onMouseDown={(e) => e.stopPropagation()}
                           >
                               <Icons.Sparkles size={13} fill={data.promptOptimize && canOptimize ? "currentColor" : "none"} />
                           </button>
                        </div>
-                       <button onClick={() => onGenerate(data.id)} onTouchStart={(e) => e.stopPropagation()} className={`ml-auto relative h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 overflow-hidden min-w-[90px] ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'}>
+                       <button onClick={() => onGenerate(data.id)} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} className={`ml-auto relative h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 overflow-hidden min-w-[90px] ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'}>
                           {data.isLoading && <div className="absolute left-0 top-0 h-full bg-cyan-500/30 z-0 transition-all duration-300 ease-linear" style={{ width: `${progress}%` }}><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent w-[200%] animate-[shimmer_2s_infinite]"></div></div>}
                           <div className="relative z-10 flex items-center gap-1.5">{data.isLoading ? <span className="tabular-nums">{Math.floor(progress)}%</span> : <><Icons.Wand2 size={12} /><span>Generate</span></>}</div>
                       </button>
