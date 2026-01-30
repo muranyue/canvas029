@@ -1681,11 +1681,11 @@ const CanvasWithSidebar: React.FC = () => {
                         const d = `M ${sx} ${sy} C ${sx + cp} ${sy}, ${tx - cp} ${ty}, ${tx} ${ty}`;
                         const isSelected = selectedConnectionId === conn.id;
                         return (
-                            <g key={conn.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); }}>
+                            <g key={conn.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedConnectionId(conn.id); }}>
                                 <path d={d} stroke={isSelected ? (isDark ? "#ffffff" : "#000000") : (isDark ? "#52525b" : "#a1a1aa")} strokeWidth={2} fill="none" className="transition-colors duration-200 group-hover:stroke-cyan-500" />
                                 <path d={d} stroke="transparent" strokeWidth={20} fill="none" />
                                 <foreignObject x={(sx+tx)/2 - 12} y={(sy+ty)/2 - 12} width={24} height={24} className={`overflow-visible pointer-events-auto transition-opacity duration-200 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                    <button className={`w-6 h-6 flex items-center justify-center border rounded-full transition-all shadow-md focus:outline-none ${isDark ? 'bg-[#1A1D21] border-zinc-600 text-zinc-400 hover:text-red-500 hover:border-red-500' : 'bg-white border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-600'}`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} title="Disconnect"><Icons.Scissors size={14}/></button>
+                                    <button className={`w-6 h-6 flex items-center justify-center border rounded-full transition-all shadow-md focus:outline-none ${isDark ? 'bg-[#1A1D21] border-zinc-600 text-zinc-400 hover:text-red-500 hover:border-red-500' : 'bg-white border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-600'}`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} title="Disconnect"><Icons.Scissors size={14}/></button>
                                 </foreignObject>
                             </g>
                         );
