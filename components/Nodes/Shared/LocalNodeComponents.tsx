@@ -99,7 +99,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
     return (
         <div className="relative h-full flex items-center" ref={ref} data-interactive="true">
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(); }} data-interactive="true">
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
                 ) : (
@@ -149,6 +149,11 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                         e.stopPropagation(); 
                                         if (!isGroup && !isDisabled) { onChange(label); onClose(); }
                                     }}
+                                    onTouchEnd={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        if (!isGroup && !isDisabled) { onChange(label); onClose(); }
+                                    }}
                                 >
                                     <div className="flex items-center gap-2">
                                         {isRatioDropdown && <AspectRatioIcon ratio={label} isDark={isDark} className={itemRatioClass} />}
@@ -179,6 +184,12 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                                 ${!isSubSelected && isDark ? 'text-gray-300' : ''} 
                                             `}
                                             onClick={(e) => {
+                                                e.stopPropagation();
+                                                onChange(subItem);
+                                                onClose();
+                                            }}
+                                            onTouchEnd={(e) => {
+                                                e.preventDefault();
                                                 e.stopPropagation();
                                                 onChange(subItem);
                                                 onClose();
@@ -281,15 +292,15 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
                                <img src={src} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
                            )}
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">
-                               {!isMain && <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); updateData(data.id, { [isVideo ? 'videoSrc' : 'imageSrc']: src, isStackOpen: false }); }} data-interactive="true"><Icons.Check size={10} className="text-cyan-400" /><span>Main</span></button>}
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12}/></button>
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src); }} data-interactive="true"><Icons.Download size={12}/></button>
+                               {!isMain && <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); updateData(data.id, { [isVideo ? 'videoSrc' : 'imageSrc']: src, isStackOpen: false }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { [isVideo ? 'videoSrc' : 'imageSrc']: src, isStackOpen: false }); }} data-interactive="true"><Icons.Check size={10} className="text-cyan-400" /><span>Main</span></button>}
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); safeDownload(src); }} data-interactive="true"><Icons.Download size={12}/></button>
                            </div>
                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[9px] text-white font-mono border border-white/10 select-none">#{index + 1}</div>
                       </div>
                     );
                 })}
-                <div className="flex flex-col justify-center h-full pl-2 pr-6"><button className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`} onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: false }); }} data-interactive="true"><Icons.X size={20} /></button></div>
+                <div className="flex flex-col justify-center h-full pl-2 pr-6"><button className={`w-10 h-10 rounded-full border flex items-center justify-center transition-all shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'}`} onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: false }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: false }); }} data-interactive="true"><Icons.X size={20} /></button></div>
             </div>
         );
     }
@@ -303,7 +314,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
            ) : (
                currentSrc && <img src={currentSrc} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
            )}
-           {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} data-interactive="true"><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{artifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
+           {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} data-interactive="true"><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{artifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
         </>
     );
 };
