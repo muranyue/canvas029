@@ -110,8 +110,12 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
         <div className="relative h-full flex items-center pointer-events-auto" ref={ref}>
             <div 
                 className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} 
-                onClick={(e) => { e.stopPropagation(); onToggle(); }} 
-                onTouchStart={(e) => e.stopPropagation()} 
+                onClick={(e) => { 
+                    e.preventDefault();
+                    e.stopPropagation(); 
+                    onToggle(); 
+                }} 
+                // Removed explicit onTouchStart here to allow click simulation to complete
                 onMouseDown={(e) => e.stopPropagation()}
             >
                 {isRatioValue ? (
@@ -125,7 +129,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
             {isOpen && (
                 <div 
-                    className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[1000] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} 
+                    className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[2000] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} 
                     onMouseDown={(e) => e.stopPropagation()} 
                     onWheel={(e) => e.stopPropagation()} 
                     onTouchStart={(e) => e.stopPropagation()}
@@ -181,7 +185,6 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                             onClose(); 
                                         }
                                     }}
-                                    onTouchStart={(e) => e.stopPropagation()}
                                 >
                                     <div className="flex items-center gap-2">
                                         {isRatioDropdown && <AspectRatioIcon ratio={label} isDark={isDark} className={itemRatioClass} />}
@@ -216,7 +219,6 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                                 onChange(subItem);
                                                 onClose();
                                             }}
-                                            onTouchStart={(e) => e.stopPropagation()}
                                         >
                                             <span className="truncate">{subItem}</span>
                                             {isSubSelected && <Icons.Check size={10} className="text-cyan-400 shrink-0 ml-2" />}

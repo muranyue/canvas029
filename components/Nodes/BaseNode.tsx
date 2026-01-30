@@ -54,6 +54,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
       if (isInteractive) {
           // Critical for mobile: stop propagation immediately if it's an interactive element.
           // This prevents the parent BaseNode from initiating a drag or capture.
+          // We DO NOT call preventDefault() here to allow focus events (keyboard) and click events to fire.
           e.stopPropagation();
       } else {
           handler(e);
