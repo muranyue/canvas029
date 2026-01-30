@@ -1065,6 +1065,24 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeTouchStart = (e: React.TouchEvent, id: string) => {
+    // Check if touch target is an interactive element (mobile optimization)
+    const target = e.target as HTMLElement;
+    const isInteractive = target.closest('[data-interactive="true"]') || 
+                          target.tagName === 'INPUT' || 
+                          target.tagName === 'TEXTAREA' || 
+                          target.tagName === 'BUTTON' ||
+                          target.tagName === 'SELECT' ||
+                          target.isContentEditable ||
+                          target.closest('button') ||
+                          target.closest('input') ||
+                          target.closest('textarea') ||
+                          target.closest('[contenteditable="true"]');
+    
+    // If touching an interactive element, don't start dragging
+    if (isInteractive) {
+      return;
+    }
+
     e.stopPropagation();
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
