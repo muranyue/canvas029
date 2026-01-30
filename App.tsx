@@ -1082,8 +1082,9 @@ const CanvasWithSidebar: React.FC = () => {
                        target.closest('textarea') ||
                        target.closest('[contenteditable="true"]');
     
-    // If touching an excluded area, don't start dragging
+    // If touching an excluded area, don't start dragging - let the event pass through
     if (isExcluded) {
+      // Don't call e.stopPropagation() here - let the event reach the interactive element
       return;
     }
 
@@ -1095,6 +1096,7 @@ const CanvasWithSidebar: React.FC = () => {
       return;
     }
 
+    // Now we know we're starting a drag operation, stop propagation
     e.stopPropagation();
     if (contextMenu) setContextMenu(null);
     if (quickAddMenu) setQuickAddMenu(null);
