@@ -1181,8 +1181,8 @@ const CanvasWithSidebar: React.FC = () => {
   };
 
   const handleNodeTouchEnd = (e: React.TouchEvent, id: string) => {
-    // If we didn't actually drag (just a tap), select the node
-    if (dragMode === 'NONE' || dragMode === 'DRAG_NODE') {
+    // Only handle selection if we didn't drag
+    if (dragMode === 'NONE') {
       const target = e.target as HTMLElement;
       
       // Check if tap is on excluded area
@@ -1197,12 +1197,17 @@ const CanvasWithSidebar: React.FC = () => {
                          target.closest('textarea');
       
       if (!isExcluded) {
-        // Simple tap to select
-        const isAlreadySelected = selectedNodeIds.has(id);
-        if (!isAlreadySelected) {
-          const newSelection = new Set<string>();
-          newSelection.add(id);
-          setSelectedNodeIds(newSelection);
+        // Check if we're on the drag handle (main node area)
+        const isDragHandle = target.closest('[data-drag-handle="true"]');
+        
+        if (isDragHandle) {
+          // Simple tap to select
+          const isAlreadySelected = selectedNodeIds.has(id);
+          if (!isAlreadySelected) {
+            const newSelection = new Set<string>();
+            newSelection.add(id);
+            setSelectedNodeIds(newSelection);
+          }
         }
       }
     }

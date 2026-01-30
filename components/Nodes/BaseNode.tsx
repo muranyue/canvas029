@@ -72,19 +72,12 @@ const BaseNode: React.FC<BaseNodeProps> = ({
       <div 
         className="relative w-full h-full pointer-events-auto"
         data-drag-handle="true"
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onClick={onClick}
       >
-          {/* Inner wrapper that handles drag events - only for the main frame */}
-          <div
-            className="absolute inset-0"
-            onMouseDown={onMouseDown}
-            onTouchStart={onTouchStart}
-            onTouchEnd={onTouchEnd}
-            onClick={onClick}
-          />
-          {/* Content layer - above the drag handler, allows pointer events for children */}
-          <div className="relative w-full h-full pointer-events-none">
-            {children}
-          </div>
+          {children}
 
           {/* Connection Ports - Groups don't have ports */}
           
