@@ -107,7 +107,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
 
     // Sync Props -> DOM
     useEffect(() => {
-        if (divRef.current) {
+        if (divRef.current && document.activeElement !== divRef.current) {
+            // 只在输入框没有焦点时才同步内容
             const currentText = getPlainText(divRef.current);
             // Loose comparison to avoid cursor jumping on every tiny re-render if content is effectively same
             // Normalize spaces for comparison
@@ -141,6 +142,11 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         onChange(newText);
     };
 
+    const handleBeforeInput = (e: React.FormEvent<HTMLDivElement>) => {
+        // 允许输入继续
+        // 这个事件在移动端输入法中很重要
+    };
+
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
@@ -150,6 +156,12 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     // Stop propagation of delete keys to prevent Node deletion
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation(); // Stop bubbling to canvas/app
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        // 输入法结束时更新
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
     };
 
     // Restored border color for dark mode (was border-transparent)
@@ -169,6 +181,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 className={`w-full flex-1 p-3 text-xs font-sans leading-7 outline-none overflow-y-auto max-h-[120px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
+                onBeforeInput={handleBeforeInput}
+                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onTouchStart={(e) => {
@@ -178,6 +192,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                         divRef.current.focus();
                     }
                 }}
+                suppressContentEditableWarning
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text' }}
             />

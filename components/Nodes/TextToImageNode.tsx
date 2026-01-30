@@ -79,7 +79,8 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        if (divRef.current) {
+        if (divRef.current && document.activeElement !== divRef.current) {
+            // 只在输入框没有焦点时才同步内容
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
@@ -106,6 +107,11 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         onChange(newText);
     };
 
+    const handleBeforeInput = (e: React.FormEvent<HTMLDivElement>) => {
+        // 允许输入继续
+        // 这个事件在移动端输入法中很重要
+    };
+
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
@@ -114,6 +120,12 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        // 输入法结束时更新
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -132,6 +144,8 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
+                onBeforeInput={handleBeforeInput}
+                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onTouchStart={(e) => {
@@ -141,6 +155,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                         divRef.current.focus();
                     }
                 }}
+                suppressContentEditableWarning
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text' }}
             />
@@ -323,12 +338,12 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               </div>
                           )}
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                      <div className="flex md:flex-nowrap flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                               <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
                               <div className={`w-px h-3 ${dividerColor}`}></div>
                           </div>
-                          <div className="flex items-center gap-1" data-interactive="true">
+                          <div className="flex items-center gap-1 flex-shrink-0" data-interactive="true">
                               <LocalCustomDropdown icon={Icons.Crop} options={supportedRatios} value={data.aspectRatio || '1:1'} onChange={handleRatioChange} isOpen={activeDropdown === 'ratio'} onToggle={() => setActiveDropdown(activeDropdown === 'ratio' ? null : 'ratio')} onClose={() => setActiveDropdown(null)} isDark={isDark} />
                               <LocalCustomDropdown icon={Icons.Monitor} options={supportedResolutions} value={data.resolution || '1k'} onChange={(val: any) => updateData(data.id, { resolution: val })} isOpen={activeDropdown === 'res'} onToggle={() => setActiveDropdown(activeDropdown === 'res' ? null : 'res')} onClose={() => setActiveDropdown(null)} disabledOptions={['1k', '2k', '4k'].filter(r => !supportedResolutions.includes(r))} isDark={isDark} />
                               <LocalCustomDropdown icon={Icons.Layers} options={[1, 2, 3, 4]} value={data.count || 1} onChange={(val: any) => updateData(data.id, { count: val })} isOpen={activeDropdown === 'count'} onToggle={() => setActiveDropdown(activeDropdown === 'count' ? null : 'count')} onClose={() => setActiveDropdown(null)} isDark={isDark} />
@@ -344,7 +359,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                                   <Icons.Sparkles size={13} fill={data.promptOptimize && canOptimize ? "currentColor" : "none"} />
                               </button>
                           </div>
-                          <button onClick={() => onGenerate(data.id)} onTouchEnd={(e) => { if (!data.isLoading && isConfigured) { e.preventDefault(); e.stopPropagation(); onGenerate(data.id); } }} className={`ml-auto h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 whitespace-nowrap ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'} data-interactive="true">
+                          <button onClick={() => onGenerate(data.id)} onTouchEnd={(e) => { if (!data.isLoading && isConfigured) { e.preventDefault(); e.stopPropagation(); onGenerate(data.id); } }} className={`ml-auto h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 whitespace-nowrap flex-shrink-0 ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'} data-interactive="true">
                               {data.isLoading ? <Icons.Loader2 className="animate-spin" size={12}/> : <Icons.Wand2 size={12} />}<span>Generate</span>
                           </button>
                       </div>
