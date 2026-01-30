@@ -34,18 +34,19 @@ const BaseNode: React.FC<BaseNodeProps> = ({
   const handleTouchStartFiltered = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     
-    // Check if touching an interactive element
+    // Check if touching an interactive element or inside a contenteditable area
     const isInteractive = target.closest('[data-interactive="true"]') ||
                           target.closest('.absolute.top-full') ||
                           target.closest('.absolute.bottom-full') ||
                           target.tagName === 'INPUT' ||
                           target.tagName === 'TEXTAREA' ||
                           target.tagName === 'BUTTON' ||
-                          target.isContentEditable ||
                           target.closest('button') ||
                           target.closest('input') ||
                           target.closest('textarea') ||
-                          target.closest('[contenteditable="true"]');
+                          target.closest('[contenteditable="true"]') ||
+                          // 检查元素本身或父元素是否是contenteditable
+                          (target.isContentEditable || target.closest('[contenteditable]'));
     
     // If touching interactive element, don't call parent handler
     if (isInteractive) {
@@ -69,7 +70,9 @@ const BaseNode: React.FC<BaseNodeProps> = ({
                           target.tagName === 'BUTTON' ||
                           target.closest('button') ||
                           target.closest('input') ||
-                          target.closest('textarea');
+                          target.closest('textarea') ||
+                          target.closest('[contenteditable="true"]') ||
+                          (target.isContentEditable || target.closest('[contenteditable]'));
     
     if (isInteractive) {
       return;
@@ -85,7 +88,9 @@ const BaseNode: React.FC<BaseNodeProps> = ({
     
     const isInteractive = target.closest('[data-interactive="true"]') ||
                           target.closest('.absolute.top-full') ||
-                          target.closest('.absolute.bottom-full');
+                          target.closest('.absolute.bottom-full') ||
+                          target.closest('[contenteditable="true"]') ||
+                          (target.isContentEditable || target.closest('[contenteditable]'));
     
     if (isInteractive) {
       return;

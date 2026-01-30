@@ -9,16 +9,34 @@ export const LocalEditableTitle: React.FC<{ title: string; onUpdate: (newTitle: 
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState(title);
     const inputRef = useRef<HTMLInputElement>(null);
+    const lastTapRef = useRef<number>(0);
+    
     useEffect(() => { if (isEditing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); } }, [isEditing]);
     useEffect(() => { if (!isEditing) setEditValue(title); }, [title, isEditing]);
     const handleBlur = () => { setIsEditing(false); if (editValue.trim() && editValue !== title) onUpdate(editValue.trim().slice(0, 20)); else setEditValue(title); };
+    
+    // 处理移动端双击
+    const handleTap = (e: React.TouchEvent) => {
+        e.stopPropagation();
+        const now = Date.now();
+        const timeSinceLastTap = now - lastTapRef.current;
+        
+        if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+            // 双击
+            e.preventDefault();
+            setIsEditing(true);
+            setEditValue(title);
+        }
+        lastTapRef.current = now;
+    };
+    
     const inputBg = isDark ? 'bg-zinc-800 text-white border-zinc-600' : 'bg-white text-gray-900 border-gray-300 shadow-sm';
     const displayBg = isDark ? 'text-gray-300 hover:border-zinc-700 bg-[#1A1D21]/50' : 'text-gray-700 hover:border-gray-300 bg-white/50';
 
     return isEditing ? (
         <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true" />
     ) : (
-        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title} data-interactive="true">{title}</div>
+        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={handleTap} title={title} data-interactive="true">{title}</div>
     );
 };
 
@@ -148,11 +166,22 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                                     onClick={(e) => { 
                                         e.stopPropagation(); 
                                         if (!isGroup && !isDisabled) { onChange(label); onClose(); }
+                                        // 移动端：点击分组项时显示二级菜单
+                                        if (isGroup) { setHoveredGroup(hoveredGroup === label ? null : label); }
                                     }}
                                     onTouchEnd={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
                                         if (!isGroup && !isDisabled) { onChange(label); onClose(); }
+                                        // 移动端：点击分组项时显示二级菜单
+                                        if (isGroup) { 
+                                            if (listRef.current) {
+                                                const listRect = listRef.current.getBoundingClientRect();
+                                                const itemRect = e.currentTarget.getBoundingClientRect();
+                                                setFlyoutTop(itemRect.top - listRect.top);
+                                            }
+                                            setHoveredGroup(hoveredGroup === label ? null : label); 
+                                        }
                                     }}
                                 >
                                     <div className="flex items-center gap-2">

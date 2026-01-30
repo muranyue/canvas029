@@ -123,11 +123,11 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full max-w-[min(450px,calc(100vw-40px))] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
                  <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
                       <div className="relative group/input">
-                          <textarea className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar ${inputBg}`} placeholder="Enter image description..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} data-interactive="true" />
+                          <textarea className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar ${inputBg}`} placeholder="Enter image description..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} data-interactive="true" />
                       </div>
                       <div className="flex items-center justify-between gap-2 h-7">
                           <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
