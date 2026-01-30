@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { NodeData, NodeType } from '../../types';
+import { Icons } from '../Icons';
 
 interface BaseNodeProps {
   data: NodeData;
@@ -81,7 +82,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
               onMouseUp={(e) => onPortMouseUp && onPortMouseUp(e, data.id, 'target')} // Handle drop
               // Mobile: No separate touchstart needed for input port usually, drop is handled by element detection or geometry
             >
-                <span className={`text-[10px] leading-none select-none relative -top-[0.5px] ${portText}`}>+</span>
+                <Icons.Plus size={10} strokeWidth={3} className={portText} />
                 <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>
             </div>
           )}
@@ -93,7 +94,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
                 onMouseDown={(e) => onConnectStart(e, 'source')}
                 onTouchStart={(e) => onConnectTouchStart && onConnectTouchStart(e, 'source')} // Mobile Connect
             >
-                    <span className={`text-[10px] leading-none select-none relative -top-[0.5px] ${portText}`}>+</span>
+                    <Icons.Plus size={10} strokeWidth={3} className={portText} />
                     <div className="absolute -inset-4 rounded-full bg-transparent z-10"></div>
             </div>
           )}

@@ -52,10 +52,42 @@ const App: React.FC = () => {
   );
 };
 
+// Helper to load state safely
+const loadState = <T,>(key: string, fallback: T): T => {
+    try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : fallback;
+    } catch (e) {
+        console.warn(`Failed to load ${key} from storage`, e);
+        return fallback;
+    }
+};
+
 const CanvasWithSidebar: React.FC = () => {
-  const [nodes, setNodes] = useState<NodeData[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [transform, setTransform] = useState<CanvasTransform>({ x: 0, y: 0, k: 1 });
+  // Initialize state from localStorage
+  const [nodes, setNodes] = useState<NodeData[]>(() => loadState('canvas_nodes', []));
+  const [connections, setConnections] = useState<Connection[]>(() => loadState('canvas_connections', []));
+  const [transform, setTransform] = useState<CanvasTransform>(() => loadState('canvas_transform', { x: 0, y: 0, k: 1 }));
+  const [canvasBg, setCanvasBg] = useState<string>(() => loadState('canvas_bg', '#0B0C0E'));
+  const [deletedNodes, setDeletedNodes] = useState<NodeData[]>(() => loadState('canvas_deleted_nodes', []));
+
+  // Persistence Effect with Dynamic Debounce
+  useEffect(() => {
+      const isGenerating = nodes.some(n => n.isLoading);
+      // 2s debounce if executing (to allow "interrupt" by refresh before 2s), 1s otherwise
+      const delay = isGenerating ? 2000 : 1000;
+
+      const handler = setTimeout(() => {
+          localStorage.setItem('canvas_nodes', JSON.stringify(nodes));
+          localStorage.setItem('canvas_connections', JSON.stringify(connections));
+          localStorage.setItem('canvas_transform', JSON.stringify(transform));
+          localStorage.setItem('canvas_bg', JSON.stringify(canvasBg));
+          localStorage.setItem('canvas_deleted_nodes', JSON.stringify(deletedNodes));
+      }, delay);
+
+      return () => clearTimeout(handler);
+  }, [nodes, connections, transform, canvasBg, deletedNodes]);
+
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [dragMode, setDragMode] = useState<DragMode | 'RESIZE_NODE' | 'SELECT'>('NONE');
   const dragModeRef = useRef(dragMode);
@@ -76,12 +108,7 @@ const CanvasWithSidebar: React.FC = () => {
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // History State (Persist deleted nodes that have content)
-  const [deletedNodes, setDeletedNodes] = useState<NodeData[]>([]);
-
   // Dragging State Refs
-  // Stores the set of Node IDs that should move when the mouse moves.
-  // Calculated ONCE at mouse down to prevent "scooping" up unrelated nodes during drag.
   const draggingNodesRef = useRef<Set<string>>(new Set());
   
   // Touch Handling Refs
@@ -97,7 +124,6 @@ const CanvasWithSidebar: React.FC = () => {
       return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [canvasBg, setCanvasBg] = useState('#0B0C0E');
   const isDark = canvasBg === '#0B0C0E';
 
   const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
@@ -996,7 +1022,6 @@ const CanvasWithSidebar: React.FC = () => {
           if (targetNode) {
               createConnection(connectionStartRef.current!.nodeId, targetNode.id);
           } else if (connectionStartRef.current?.type === 'source') {
-               e.preventDefault(); // FIX: Prevent ghost mouse events from closing the menu
                setQuickAddMenu({ 
                    sourceId: connectionStartRef.current.nodeId, 
                    x: touch.clientX, 
@@ -1259,7 +1284,7 @@ const CanvasWithSidebar: React.FC = () => {
               if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy }; 
           } 
           return n; 
-              }));
+      }));
     } else if (dragMode === 'SELECT') {
         const x = Math.min(dragStartRef.current.x, e.clientX);
         const y = Math.min(dragStartRef.current.y, e.clientY);
@@ -1447,7 +1472,7 @@ const CanvasWithSidebar: React.FC = () => {
   const renderContextMenu = () => {
     if (!contextMenu) return null;
     return (
-        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
             {contextMenu.type === 'NODE' && contextMenu.nodeId && (
                 <>
                     {contextMenu.nodeType === NodeType.GROUP ? (
@@ -1478,7 +1503,7 @@ const CanvasWithSidebar: React.FC = () => {
   const renderQuickAddMenu = () => {
     if (!quickAddMenu) return null;
     return (
-        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col animate-in fade-in zoom-in-95 duration-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: quickAddMenu.x, top: quickAddMenu.y }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+        <div className={`fixed z-50 border rounded-lg shadow-2xl py-1 min-w-[160px] flex flex-col animate-in fade-in zoom-in-95 duration-100 ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} style={{ left: quickAddMenu.x, top: quickAddMenu.y }} onMouseDown={(e) => e.stopPropagation()}>
             <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b mb-1 ${isDark ? 'text-gray-500 border-zinc-800' : 'text-gray-400 border-gray-100'}`}>Add Node</div>
             <button className={`text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${isDark ? 'text-gray-300 hover:bg-zinc-800 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-black'}`} onClick={() => handleQuickAddNode(NodeType.TEXT_TO_IMAGE)}><Icons.Image size={14} className="text-cyan-400"/> Text to Image</button>
             <button className={`text-left px-3 py-2 text-xs transition-colors flex items-center gap-2 ${isDark ? 'text-gray-300 hover:bg-zinc-800 hover:text-white' : 'text-gray-700 hover:bg-gray-100 hover:text-black'}`} onClick={() => handleQuickAddNode(NodeType.TEXT_TO_VIDEO)}><Icons.Video size={14} className="text-cyan-400"/> Text to Video</button>

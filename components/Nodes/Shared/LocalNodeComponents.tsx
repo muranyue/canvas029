@@ -16,9 +16,9 @@ export const LocalEditableTitle: React.FC<{ title: string; onUpdate: (newTitle: 
     const displayBg = isDark ? 'text-gray-300 hover:border-zinc-700 bg-[#1A1D21]/50' : 'text-gray-700 hover:border-gray-300 bg-white/50';
 
     return isEditing ? (
-        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold touch-auto`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} />
+        <input ref={inputRef} type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleBlur} onKeyDown={(e) => { if (e.key === 'Enter') handleBlur(); if (e.key === 'Escape') { setEditValue(title); setIsEditing(false); } }} className={`${inputBg} border rounded px-2 py-0.5 outline-none w-[140px] text-xs font-bold select-text cursor-text`} onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} />
     ) : (
-        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} title={title}>{title}</div>
+        <div className={`${displayBg} font-bold text-xs px-2 py-0.5 rounded cursor-text border border-transparent truncate max-w-[140px]`} onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); setEditValue(title); }} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} title={title}>{title}</div>
     );
 };
 
@@ -99,7 +99,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
     return (
         <div className="relative h-full flex items-center" ref={ref}>
-            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors touch-manipulation ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }}>
+            <div className={`flex items-center gap-1.5 cursor-pointer group h-full px-1.5 rounded transition-colors ${isOpen ? (isDark ? 'bg-white/5' : 'bg-gray-100') : ''} ${hoverClass}`} onClick={(e) => { e.stopPropagation(); onToggle(); }} onTouchStart={(e) => e.stopPropagation()}>
                 {isRatioValue ? (
                     <AspectRatioIcon ratio={value} isDark={isDark} className={ratioIconClass} />
                 ) : (
@@ -111,7 +111,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
 
             {isOpen && (
                 <div className={`absolute bottom-full mb-2 ${align === 'left' ? 'left-0' : align === 'right' ? 'right-0' : 'left-1/2 -translate-x-1/2'} ${width} min-w-[120px] ${bgClass} border rounded-lg shadow-2xl py-1 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-150 overflow-visible`} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
-                    <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1 touch-auto">
+                    <div ref={listRef} className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                         {options.map((opt: any) => {
                             const isGroup = typeof opt === 'object';
                             const label = isGroup ? opt.label : opt;
@@ -131,7 +131,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                             return (
                                 <div 
                                     key={label}
-                                    className={`relative px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between group/item cursor-pointer touch-manipulation
+                                    className={`relative px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between group/item cursor-pointer
                                         ${isDisabled 
                                             ? 'text-zinc-600 cursor-not-allowed opacity-50' 
                                             : (isSelected || (isGroup && isGroupHovered)
@@ -167,13 +167,13 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                             onMouseEnter={handleMouseEnterFlyout}
                             onMouseLeave={handleMouseLeave}
                         >
-                            <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1 touch-auto">
+                            <div className="max-h-[250px] overflow-y-auto custom-scrollbar p-1">
                                 {activeGroupItems.map((subItem: string) => {
                                     const isSubSelected = subItem === value;
                                     return (
                                         <div 
                                             key={subItem}
-                                            className={`px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between cursor-pointer mb-0.5 touch-manipulation
+                                            className={`px-3 py-1.5 text-[10px] font-medium rounded-md transition-colors flex items-center justify-between cursor-pointer mb-0.5
                                                 ${isSubSelected ? activeItem : optionHover}
                                                 ${!isSubSelected && isDark ? 'text-gray-300' : ''} 
                                             `}
@@ -211,7 +211,7 @@ export const LocalThumbnailItem = memo(({ src, index, isDark }: { src: string, i
 export const LocalInputThumbnails = memo(({ inputs, ready, isDark }: { inputs: string[], ready: boolean, isDark: boolean }) => {
     if (!inputs || inputs.length === 0) return null;
     return (
-       <div className="flex justify-center gap-2 pb-2 overflow-x-auto no-scrollbar min-h-[56px] touch-auto">
+       <div className="flex justify-center gap-2 pb-2 overflow-x-auto no-scrollbar min-h-[56px]">
            {inputs.slice(0, 8).map((src, i) => (
                ready ? <LocalThumbnailItem key={src + i} src={src} index={i} isDark={isDark} /> : <div key={i} className={`relative w-[48px] h-[48px] flex-shrink-0 border rounded-lg overflow-hidden shadow-sm ${isDark ? 'border-zinc-700 bg-black/40' : 'border-gray-300 bg-gray-100'}`}><div className={`absolute inset-0 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-200'}`} /></div>
            ))}
@@ -268,7 +268,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
 
     if (data.isStackOpen) {
         return (
-            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200 touch-auto overflow-x-auto no-scrollbar" onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+            <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200" onTouchStart={(e) => e.stopPropagation()}>
                 {sortedArtifacts.map((src, index) => {
                     const isMain = index === 0;
                     const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src) || data.type === 'TEXT_TO_VIDEO';
@@ -304,5 +304,38 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
            )}
            {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }}><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{artifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
         </>
+    );
+};
+
+export const LoadingOverlay = () => {
+    return (
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-xl overflow-hidden pointer-events-none border border-white/10 shadow-inner">
+             
+             {/* Liquid Pigment Background Base */}
+             <div className="absolute inset-0 bg-[#1A1A2E] z-0" />
+
+             {/* Organic Moving Blobs - Low Saturation Creamy Colors */}
+             <div className="absolute inset-0 z-0 overflow-hidden opacity-60 mix-blend-screen filter blur-[80px]">
+                 {/* Blob 1: Misty Purple */}
+                 <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-[rgba(160,150,220,0.6)] rounded-full animate-blob-1" />
+                 
+                 {/* Blob 2: Dusty Cyan */}
+                 <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-[rgba(130,180,200,0.6)] rounded-full animate-blob-2" />
+                 
+                 {/* Blob 3: Muted Pink */}
+                 <div className="absolute top-[30%] left-[30%] w-[60%] h-[60%] bg-[rgba(220,160,180,0.5)] rounded-full animate-blob-3" />
+             </div>
+
+             {/* Frosted Glass Overlay - Top Layer */}
+             <div className="absolute inset-0 bg-white/5 backdrop-blur-sm z-10" />
+            
+            {/* Center Loader UI */}
+            <div className="relative z-20 flex flex-col items-center gap-2">
+                <div className="p-3 bg-white/10 rounded-full border border-white/20 backdrop-blur-xl shadow-2xl relative overflow-hidden ring-1 ring-white/30">
+                    <div className="absolute inset-0 bg-white/20 blur-xl rounded-full animate-pulse" />
+                    <Icons.Loader2 size={24} className="text-white drop-shadow-md animate-spin relative z-10" />
+                </div>
+            </div>
+        </div>
     );
 };
