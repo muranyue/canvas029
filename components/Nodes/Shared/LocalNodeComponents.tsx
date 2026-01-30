@@ -131,7 +131,7 @@ export const LocalCustomDropdown = ({ options, value, onChange, isOpen, onToggle
                     e.stopPropagation(); 
                     onToggle(); 
                 }} 
-                // Enhanced robust pointer event stop
+                // Enhanced robust pointer event stop for mobile
                 onPointerDown={(e) => e.stopPropagation()}
             >
                 {isRatioValue ? (
