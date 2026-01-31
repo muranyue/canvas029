@@ -10,7 +10,7 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 简化版的 ContentEditablePromptInput（用于图像节点）- 使用 execCommand 保持稳定
+// 使用纯 Selection/Range API 的 ContentEditablePromptInput - 不依赖 execCommand
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
@@ -23,29 +23,79 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
+    // 纯 Selection/Range API 插入文本
+    const insertAtCursor = (content: string, isHtml: boolean) => {
+        const div = divRef.current;
+        if (!div) return;
+        
+        const sel = window.getSelection();
+        if (!sel) return;
+        
+        // 确保有选区
+        let range: Range;
+        if (sel.rangeCount > 0) {
+            range = sel.getRangeAt(0);
+            // 确保选区在当前 div 内
+            if (!div.contains(range.commonAncestorContainer)) {
+                range = document.createRange();
+                range.selectNodeContents(div);
+                range.collapse(false);
+            }
+        } else {
+            range = document.createRange();
+            range.selectNodeContents(div);
+            range.collapse(false);
+        }
+        
+        range.deleteContents();
+        
+        if (isHtml) {
+            const temp = document.createElement('div');
+            temp.innerHTML = content;
+            const frag = document.createDocumentFragment();
+            let lastNode: Node | null = null;
+            while (temp.firstChild) {
+                lastNode = temp.firstChild;
+                frag.appendChild(temp.firstChild);
+            }
+            range.insertNode(frag);
+            if (lastNode) {
+                range.setStartAfter(lastNode);
+                range.setEndAfter(lastNode);
+            }
+        } else {
+            const textNode = document.createTextNode(content);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.setEndAfter(textNode);
+        }
+        
+        sel.removeAllRanges();
+        sel.addRange(range);
+        
+        // 触发 input 事件更新 value
+        const newText = getPlainText(div);
+        onChange(newText);
+    };
+
     React.useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
-                if (text.startsWith('@')) {
-                    const html = createChipHtml(text);
-                    const success = document.execCommand('insertHTML', false, html);
-                    if (!success) {
-                        onChange(value + text);
+                // 使用 setTimeout 确保 focus 生效
+                setTimeout(() => {
+                    if (text.startsWith('@')) {
+                        insertAtCursor(createChipHtml(text), true);
+                    } else {
+                        insertAtCursor(text, false);
                     }
-                } else {
-                    const success = document.execCommand('insertText', false, text);
-                    if (!success) {
-                        onChange(value + text);
-                    }
-                }
+                }, 0);
             }
         }
     }));
 
     const parseTextToHtml = (text: string) => {
         if (!text) return '';
-        // Match "@image n" or "@video n" format
         const regex = /(@(?:image|video)\s+\d+)/gi;
         const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -79,24 +129,13 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        if (divRef.current) {
+        if (divRef.current && document.activeElement !== divRef.current) {
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
 
             if (normalizedValue !== normalizedCurrent) {
-                const newHtml = parseTextToHtml(value);
-                divRef.current.innerHTML = newHtml;
-
-                if (value.length > currentText.length) {
-                    divRef.current.focus();
-                    const range = document.createRange();
-                    range.selectNodeContents(divRef.current);
-                    range.collapse(false);
-                    const sel = window.getSelection();
-                    sel?.removeAllRanges();
-                    sel?.addRange(range);
-                }
+                divRef.current.innerHTML = parseTextToHtml(value);
             }
         }
     }, [value]);
@@ -109,7 +148,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
-        document.execCommand('insertText', false, text);
+        insertAtCursor(text, false);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
