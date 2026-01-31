@@ -72,11 +72,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         const sel = window.getSelection();
         if (!sel) return;
         
-        // 确保有选区
         let range: Range;
         if (sel.rangeCount > 0) {
             range = sel.getRangeAt(0);
-            // 确保选区在当前 div 内
             if (!div.contains(range.commonAncestorContainer)) {
                 range = document.createRange();
                 range.selectNodeContents(div);
@@ -114,7 +112,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // 标记为内部变更，防止 useEffect 重置
         isInternalChangeRef.current = true;
         const newText = getPlainText(div);
         onChange(newText);
@@ -124,7 +121,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
-                // 使用 setTimeout 确保 focus 生效
                 setTimeout(() => {
                     if (text.startsWith('@')) {
                         insertAtCursor(createChipHtml(text), true);
@@ -150,28 +146,13 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        // 只在初始化或外部强制更新时同步 DOM
-        // 关键：永远不要在用户可能正在输入时重置 innerHTML
         if (isInternalChangeRef.current) {
             isInternalChangeRef.current = false;
             return;
         }
         if (isComposingRef.current) return;
         if (!divRef.current) return;
-        
-        // iOS Safari 兼容：检查是否有焦点或正在触摸
-        const isFocused = document.activeElement === divRef.current;
-        const hasFocus = divRef.current.contains(document.activeElement);
-        if (isFocused || hasFocus) return;
-        
-        // 额外检查：如果 div 内有选区，也不要重置
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            if (divRef.current.contains(range.commonAncestorContainer)) {
-                return;
-            }
-        }
+        if (document.activeElement === divRef.current) return;
         
         const currentText = getPlainText(divRef.current);
         if (value !== currentText) {
@@ -180,7 +161,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     }, [value]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        // 组合输入中不更新
         if (isComposingRef.current) return;
         isInternalChangeRef.current = true;
         const newText = getPlainText(e.currentTarget);
@@ -217,12 +197,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => {
-                e.stopPropagation();
-                if (divRef.current && document.activeElement !== divRef.current) {
-                    divRef.current.focus();
-                }
-            }}
+            onTouchStart={(e) => e.stopPropagation()}
             data-interactive="true"
         >
             <div 
@@ -234,27 +209,20 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
-                }}
+                onTouchStart={(e) => e.stopPropagation()}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ 
                     whiteSpace: 'pre-wrap', 
                     minHeight: '80px', 
                     cursor: 'text',
-                    // Mobile Safari/iPad 兼容性修复
-                    WebkitAppearance: 'none',
-                    WebkitTapHighlightColor: 'transparent',
-                    fontSize: '16px',  // 防止 iPad 自动缩放（必须 >= 16px）
+                    fontSize: '16px',
                     lineHeight: '1.75',
+                    touchAction: 'auto',
                     WebkitUserSelect: 'text',
                     userSelect: 'text',
-                    // 注意：不要使用 WebkitUserModify，会导致移动端 build 后无法输入
                 } as React.CSSProperties}
+                data-interactive="true"
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-xs font-sans leading-7 ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
