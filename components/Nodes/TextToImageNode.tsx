@@ -18,10 +18,50 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
 }>(({ value, onChange, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
     const isComposingRef = useRef(false);
+    const lastValueRef = useRef(value);
 
     const createChipHtml = (text: string) => {
         // 添加零宽空格确保光标可以定位到胶囊体后面
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
+    };
+
+    // 使用现代API插入文本，兼容移动端build
+    const insertTextAtCursor = (text: string, isHtml: boolean = false) => {
+        const div = divRef.current;
+        if (!div) return false;
+        
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+            // 没有选区时，追加到末尾
+            if (isHtml) {
+                div.innerHTML += text;
+            } else {
+                div.appendChild(document.createTextNode(text));
+            }
+            return true;
+        }
+        
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        
+        if (isHtml) {
+            const fragment = range.createContextualFragment(text);
+            range.insertNode(fragment);
+            // 移动光标到插入内容后面
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        } else {
+            const textNode = document.createTextNode(text);
+            range.insertNode(textNode);
+            // 移动光标到文本节点后面
+            range.setStartAfter(textNode);
+            range.setEndAfter(textNode);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+        
+        return true;
     };
 
     useImperativeHandle(ref, () => ({
@@ -30,12 +70,26 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 // 先确保聚焦
                 if (document.activeElement !== divRef.current) {
                     divRef.current.focus();
-                }
-                const html = createChipHtml(text);
-                const success = document.execCommand('insertHTML', false, html);
-                if (!success) {
-                    // 回退方案：直接更新value
-                    onChange(value + text);
+                    // 等待焦点生效
+                    requestAnimationFrame(() => {
+                        const html = createChipHtml(text);
+                        if (!insertTextAtCursor(html, true)) {
+                            // 回退方案：直接更新value
+                            onChange(value + text);
+                        } else {
+                            // 触发更新
+                            const newText = getPlainText(divRef.current!);
+                            onChange(newText);
+                        }
+                    });
+                } else {
+                    const html = createChipHtml(text);
+                    if (!insertTextAtCursor(html, true)) {
+                        onChange(value + text);
+                    } else {
+                        const newText = getPlainText(divRef.current);
+                        onChange(newText);
+                    }
                 }
             }
         }
@@ -78,6 +132,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
+        lastValueRef.current = value;
         // 只在非输入状态且非组合输入时同步
         if (divRef.current && document.activeElement !== divRef.current && !isComposingRef.current) {
             const currentText = getPlainText(divRef.current);
@@ -112,7 +167,14 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
-        document.execCommand('insertText', false, text);
+        // 使用现代API替代execCommand
+        if (!insertTextAtCursor(text, false)) {
+            // 回退：直接追加
+            onChange(value + text);
+        } else {
+            const newText = getPlainText(divRef.current!);
+            onChange(newText);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

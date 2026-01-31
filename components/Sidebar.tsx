@@ -25,6 +25,11 @@ const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'imag
         <div 
            className="relative aspect-square rounded-lg overflow-hidden border border-zinc-800 cursor-pointer group bg-black"
            onClick={onClick}
+           onTouchEnd={(e) => {
+               e.preventDefault();
+               e.stopPropagation();
+               onClick();
+           }}
         >
             {type === 'image' ? (
                 <img src={node.imageSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" decoding="async"/>
@@ -130,6 +135,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           e.stopPropagation();
           toggleMenu(category);
         }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleMenu(category);
+        }}
     >
       <Icon size={20} />
       {/* Tooltip - Desktop Only */}
@@ -162,6 +172,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         // Close menu on mobile after selection
         if (window.innerWidth < 768) setActiveMenu(null);
       }}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick();
+        // Close menu on mobile after selection
+        setActiveMenu(null);
+      }}
     >
       <div className={`w-8 h-8 flex items-center justify-center border rounded-lg shadow-sm shrink-0 transition-colors ${active ? 'text-cyan-400 border-cyan-500/30' : (isDark ? 'bg-zinc-800 border-zinc-700 text-gray-400 group-hover:text-cyan-400' : 'bg-gray-50 border-gray-200 text-gray-400 group-hover:text-cyan-600')}`}>
         <Icon size={16} />
@@ -185,8 +202,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     return (
         <div className="w-full flex flex-col gap-3">
              <div className={`flex rounded-lg p-1 border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-100 border-gray-200'}`}>
-                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'IMAGES' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('IMAGES')}>IMAGES</button>
-                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'VIDEOS' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('VIDEOS')}>VIDEOS</button>
+                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'IMAGES' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('IMAGES')} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setHistoryTab('IMAGES'); }}>IMAGES</button>
+                 <button className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${historyTab === 'VIDEOS' ? tabActive : tabInactive}`} onClick={() => setHistoryTab('VIDEOS')} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setHistoryTab('VIDEOS'); }}>VIDEOS</button>
              </div>
 
              <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1 content-start">
@@ -301,7 +318,7 @@ const Sidebar: React.FC<SidebarProps> = ({
              {/* Submenu Overlay for Mobile */}
              {activeMenu && activeMenu !== 'SETTINGS' && (
                  <>
-                    <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setActiveMenu(null)}></div>
+                    <div className="fixed inset-0 bg-black/50 z-[-1]" onClick={() => setActiveMenu(null)} onTouchEnd={(e) => { e.preventDefault(); setActiveMenu(null); }}></div>
                     {renderSubMenu()}
                  </>
              )}

@@ -44,7 +44,7 @@ export const OriginalImageNode: React.FC<OriginalImageNodeProps> = ({
                   />
               ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-zinc-600 gap-3">
-                      <div className={`w-16 h-16 rounded-full border flex items-center justify-center cursor-pointer transition-all shadow-lg group/icon ${isDark ? 'bg-zinc-900 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} hover:text-cyan-400 hover:border-cyan-500/50`} onClick={(e) => { e.stopPropagation(); if (onUpload) onUpload(data.id); }} onTouchStart={(e) => e.stopPropagation()}>
+                      <div className={`w-16 h-16 rounded-full border flex items-center justify-center cursor-pointer transition-all shadow-lg group/icon ${isDark ? 'bg-zinc-900 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} hover:text-cyan-400 hover:border-cyan-500/50`} onClick={(e) => { e.stopPropagation(); if (onUpload) onUpload(data.id); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); if (onUpload) onUpload(data.id); }} data-interactive="true">
                           <Icons.Upload size={28} className={`transition-colors ${isDark ? 'text-zinc-500 group-hover/icon:text-cyan-400' : 'text-gray-400 group-hover/icon:text-cyan-500'}`}/>
                       </div>
                       <span className={`text-[11px] font-medium select-none ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Click icon to Upload</span>

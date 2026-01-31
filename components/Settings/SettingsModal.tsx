@@ -392,8 +392,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center md:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-            <div className={`w-full h-full md:max-w-6xl md:h-[85vh] md:rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl border-0 md:border ${isDark ? 'bg-[#0B0C0E] border-zinc-800' : 'bg-white border-gray-200'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[250] flex items-center justify-center md:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose} onTouchEnd={(e) => { e.preventDefault(); onClose(); }}>
+            <div className={`w-full h-full md:max-w-6xl md:h-[85vh] md:rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl border-0 md:border ${isDark ? 'bg-[#0B0C0E] border-zinc-800' : 'bg-white border-gray-200'}`} onClick={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
                 
                 {/* Sidebar - Collapsible or top/bottom on mobile? Let's stack vertical on mobile */}
                 <div className={`w-full md:w-64 flex flex-col border-b md:border-b-0 md:border-r ${sidebarBg} max-h-[35vh] md:max-h-full`}>
