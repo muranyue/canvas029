@@ -930,7 +930,8 @@ const CanvasWithSidebar: React.FC = () => {
   // --- Touch Event Handlers for Mobile Pan/Zoom ---
   const handleTouchStart = (e: React.TouchEvent) => {
       // Don't interfere if touching a UI element that should handle its own events
-      if ((e.target as HTMLElement).closest('button, input, .node-content')) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('button, input, textarea, [contenteditable="true"], [data-interactive="true"], .node-content')) return;
 
       if (e.touches.length === 1) {
           const touch = e.touches[0];
