@@ -199,6 +199,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             data-interactive="true"
         >
             <div
