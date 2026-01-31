@@ -18,9 +18,32 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
+    const isComposingRef = useRef(false);
+    const isInternalChangeRef = useRef(false);
 
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
+    };
+
+    const getPlainText = (node: Node): string => {
+        let text = '';
+        node.childNodes.forEach(child => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const el = child as HTMLElement;
+                if (el.classList.contains('chip')) {
+                    text += el.dataset.value || '';
+                } else if (el.tagName === 'BR') {
+                    text += '\n';
+                } else if (el.tagName === 'DIV') {
+                    text += '\n' + getPlainText(el);
+                } else {
+                    text += getPlainText(el);
+                }
+            }
+        });
+        return text;
     };
 
     // 纯 Selection/Range API 插入文本
@@ -73,7 +96,8 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // 触发 input 事件更新 value
+        // 标记为内部变更，防止 useEffect 重置
+        isInternalChangeRef.current = true;
         const newText = getPlainText(div);
         onChange(newText);
     };
@@ -107,40 +131,38 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         }).join('').replace(/\n/g, '<br>');
     };
 
-    const getPlainText = (node: Node): string => {
-        let text = '';
-        node.childNodes.forEach(child => {
-            if (child.nodeType === Node.TEXT_NODE) {
-                text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
-            } else if (child.nodeType === Node.ELEMENT_NODE) {
-                const el = child as HTMLElement;
-                if (el.classList.contains('chip')) {
-                    text += el.dataset.value || '';
-                } else if (el.tagName === 'BR') {
-                    text += '\n';
-                } else if (el.tagName === 'DIV') {
-                    text += '\n' + getPlainText(el);
-                } else {
-                    text += getPlainText(el);
-                }
-            }
-        });
-        return text;
-    };
-
     useEffect(() => {
-        if (divRef.current && document.activeElement !== divRef.current) {
-            const currentText = getPlainText(divRef.current);
-            const normalizedValue = value.replace(/\s+/g, ' ');
-            const normalizedCurrent = currentText.replace(/\s+/g, ' ');
-
-            if (normalizedValue !== normalizedCurrent) {
-                divRef.current.innerHTML = parseTextToHtml(value);
-            }
+        // 如果是内部变更或正在组合输入，跳过
+        if (isInternalChangeRef.current) {
+            isInternalChangeRef.current = false;
+            return;
+        }
+        if (isComposingRef.current) return;
+        if (!divRef.current) return;
+        // 如果正在聚焦，不要重置内容
+        if (document.activeElement === divRef.current) return;
+        
+        const currentText = getPlainText(divRef.current);
+        if (value !== currentText) {
+            divRef.current.innerHTML = parseTextToHtml(value);
         }
     }, [value]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        // 组合输入中不更新
+        if (isComposingRef.current) return;
+        isInternalChangeRef.current = true;
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
+    };
+
+    const handleCompositionStart = () => {
+        isComposingRef.current = true;
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        isComposingRef.current = false;
+        isInternalChangeRef.current = true;
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
     };
@@ -153,11 +175,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
-    };
-
-    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
-        const newText = getPlainText(e.currentTarget);
-        onChange(newText);
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -182,6 +199,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
+                onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
