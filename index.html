@@ -9,8 +9,26 @@
     <style>
       body { margin: 0; padding: 0; overflow: hidden; background-color: #0B0C0E; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #E4E4E7; touch-action: pan-x pan-y; }
       
+      /* iOS Safari contentEditable 修复 */
+      [contenteditable="true"], [contenteditable] {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        touch-action: auto !important;
+        -webkit-touch-callout: default !important;
+        -webkit-tap-highlight-color: transparent;
+      }
+      
       /* 允许输入框正常触摸交互 */
-      input, textarea, [contenteditable="true"], [contenteditable] {
+      input, textarea {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        touch-action: auto !important;
+        -webkit-appearance: none;
+        font-size: 16px !important; /* 防止 iOS 自动缩放 */
+      }
+      
+      /* 确保 data-interactive 元素可以正常交互 */
+      [data-interactive="true"] {
         touch-action: auto !important;
       }
       

@@ -197,7 +197,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
             data-interactive="true"
         >
             <div 
@@ -209,7 +208,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onTouchStart={(e) => e.stopPropagation()}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ 
@@ -218,7 +216,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     cursor: 'text',
                     fontSize: '16px',
                     lineHeight: '1.75',
-                    touchAction: 'auto',
                     WebkitUserSelect: 'text',
                     userSelect: 'text',
                 } as React.CSSProperties}

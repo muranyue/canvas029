@@ -199,12 +199,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => {
-                e.stopPropagation();
-                if (divRef.current && document.activeElement !== divRef.current) {
-                    divRef.current.focus();
-                }
-            }}
             data-interactive="true"
         >
             <div
@@ -216,27 +210,18 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
-                }}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ 
                     whiteSpace: 'pre-wrap', 
                     minHeight: '70px', 
                     cursor: 'text',
-                    // Mobile Safari/iPad 兼容性修复
-                    WebkitAppearance: 'none',
-                    WebkitTapHighlightColor: 'transparent',
-                    fontSize: '16px',  // 防止 iPad 自动缩放（必须 >= 16px）
+                    fontSize: '16px',
                     lineHeight: '1.5',
                     WebkitUserSelect: 'text',
                     userSelect: 'text',
-                    // 注意：不要使用 WebkitUserModify，会导致移动端 build 后无法输入
                 } as React.CSSProperties}
+                data-interactive="true"
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
