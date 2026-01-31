@@ -7,17 +7,19 @@ interface CreativeDescNodeProps {
   data: NodeData;
   updateData: (id: string, updates: Partial<NodeData>) => void;
   onGenerate: (id: string) => void;
+  onDelete?: (id: string) => void;
   selected?: boolean;
   showControls?: boolean;
   isDark?: boolean;
 }
 
 export const CreativeDescNode: React.FC<CreativeDescNodeProps> = ({
-    data, updateData, onGenerate, selected, showControls, isDark = true
+    data, updateData, onGenerate, onDelete, selected, showControls, isDark = true
 }) => {
     const isSelectedAndStable = selected;
 
     const containerBg = isDark ? 'bg-[#18181B]' : 'bg-white';
+    const overlayToolbarBg = isDark ? 'bg-black/50 border-white/5 text-gray-400' : 'bg-white/50 border-black/5 text-gray-600';
     const containerBorder = selected 
         ? 'border-cyan-500 shadow-[0_0_0_1px_rgba(6,182,212,1)]' 
         : (isDark ? 'border-zinc-800' : 'border-gray-200');
@@ -26,11 +28,33 @@ export const CreativeDescNode: React.FC<CreativeDescNodeProps> = ({
 
     return (
         <>
-          <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between"><EditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
+          <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
+              <EditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} />
+              <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border xl:hidden ${overlayToolbarBg}`}>
+                  <button title="Delete" className={`p-1 rounded transition-colors text-red-400 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`} onClick={(e) => { e.stopPropagation(); onDelete?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete?.(data.id); }} data-interactive="true"><Icons.Trash2 size={12} /></button>
+              </div>
+          </div>
           <div className={`w-full h-full border rounded-xl p-4 flex flex-col shadow-xl ${containerBg} ${containerBorder}`}>
               <div className={`flex items-center gap-2 text-xs mb-3 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}><div className="p-1.5 bg-cyan-500/10 rounded-md"><Icons.Wand2 size={14} className="text-cyan-400"/></div><span className="uppercase font-bold tracking-wider text-[10px]">Creative Assistant</span></div>
-              <textarea className={`w-full flex-1 border rounded-lg p-3 text-[10px] leading-relaxed resize-none focus:outline-none transition-colors no-scrollbar ${inputBg}`} placeholder="Enter your initial idea here..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onMouseDown={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.stopPropagation(); (e.target as HTMLTextAreaElement).focus(); }} data-interactive="true" />
-              <button onClick={() => onGenerate(data.id)} className="mt-3 w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 border border-cyan-500/20 transition-all" data-interactive="true">
+              <textarea 
+                  className={`w-full flex-1 border rounded-lg p-3 text-[10px] leading-relaxed resize-none focus:outline-none transition-colors no-scrollbar ${inputBg}`} 
+                  placeholder="Enter your initial idea here..." 
+                  value={data.prompt || ''} 
+                  onChange={(e) => updateData(data.id, { prompt: e.target.value })} 
+                  onMouseDown={(e) => e.stopPropagation()} 
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      // 确保点击后能获取焦点
+                      const target = e.currentTarget;
+                      setTimeout(() => target.focus(), 10);
+                  }}
+                  onWheel={(e) => e.stopPropagation()} 
+                  onKeyDown={(e) => e.stopPropagation()}
+                  data-interactive="true"
+                  style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
+              />
+              <button onClick={() => onGenerate(data.id)} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onGenerate(data.id); }} className="mt-3 w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 border border-cyan-500/20 transition-all" data-interactive="true">
                   {data.isLoading ? <Icons.Loader2 className="animate-spin" size={12}/> : 'Optimize Prompt'}
               </button>
               {data.optimizedPrompt && isSelectedAndStable && showControls && (

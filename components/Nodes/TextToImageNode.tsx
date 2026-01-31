@@ -17,6 +17,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
+    const isComposingRef = useRef(false);
 
     const createChipHtml = (text: string) => {
         return `&nbsp;<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>&nbsp;`;
@@ -25,11 +26,15 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
             if (divRef.current) {
-                divRef.current.focus();
+                // 先确保聚焦
+                if (document.activeElement !== divRef.current) {
+                    divRef.current.focus();
+                }
                 const html = createChipHtml(text);
                 const success = document.execCommand('insertHTML', false, html);
                 if (!success) {
-                    onChange(value + text);
+                    // 回退方案：直接更新value
+                    onChange(value + ' ' + text + ' ');
                 }
             }
         }
@@ -70,7 +75,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        if (divRef.current && document.activeElement !== divRef.current) {
+        // 只在非输入状态且非组合输入时同步
+        if (divRef.current && document.activeElement !== divRef.current && !isComposingRef.current) {
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
@@ -78,21 +84,24 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
             if (normalizedValue !== normalizedCurrent) {
                 const newHtml = parseTextToHtml(value);
                 divRef.current.innerHTML = newHtml;
-                
-                if (value.length > currentText.length) {
-                    divRef.current.focus();
-                    const range = document.createRange();
-                    range.selectNodeContents(divRef.current);
-                    range.collapse(false);
-                    const sel = window.getSelection();
-                    sel?.removeAllRanges();
-                    sel?.addRange(range);
-                }
             }
         }
     }, [value]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        // 组合输入中不更新
+        if (isComposingRef.current) return;
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
+    };
+
+    const handleCompositionStart = () => {
+        isComposingRef.current = true;
+    };
+
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        isComposingRef.current = false;
+        // 组合输入结束后更新
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
     };
@@ -107,6 +116,18 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         e.stopPropagation();
     };
 
+    const handleFocus = () => {
+        // 确保移动端聚焦时光标可见
+        if (divRef.current) {
+            const range = document.createRange();
+            range.selectNodeContents(divRef.current);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        }
+    };
+
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
     const textColor = isDark ? 'text-zinc-200' : 'text-gray-900';
@@ -116,6 +137,13 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+                e.stopPropagation();
+                // 移动端点击时主动聚焦
+                if (divRef.current) {
+                    divRef.current.focus();
+                }
+            }}
             data-interactive="true"
         >
             <div 
@@ -125,9 +153,19 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onFocus={handleFocus}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onTouchEnd={(e) => {
+                    // 确保触摸结束时聚焦
+                    e.stopPropagation();
+                    if (divRef.current && document.activeElement !== divRef.current) {
+                        divRef.current.focus();
+                    }
+                }}
                 suppressContentEditableWarning
                 spellCheck={false}
-                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text' }}
+                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
@@ -148,12 +186,13 @@ interface TextToImageNodeProps {
   inputs?: string[];
   onMaximize?: (id: string) => void;
   onDownload?: (id: string) => void;
+  onDelete?: (id: string) => void;
   isDark?: boolean;
   isSelecting?: boolean;
 }
 
 export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
-    data, updateData, onGenerate, selected, showControls, inputs = [], onMaximize, onDownload, isDark = true, isSelecting
+    data, updateData, onGenerate, selected, showControls, inputs = [], onMaximize, onDownload, onDelete, isDark = true, isSelecting
 }) => {
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [deferredInputs, setDeferredInputs] = useState(false);
@@ -241,6 +280,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
            <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12} /></button>
                <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDownload?.(data.id); }} data-interactive="true"><Icons.Download size={12} /></button>
+               <button title="Delete" className={`p-1 rounded transition-colors text-red-400 xl:hidden ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`} onClick={(e) => { e.stopPropagation(); onDelete?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete?.(data.id); }} data-interactive="true"><Icons.Trash2 size={12} /></button>
            </div>
         </div>
         
@@ -271,7 +311,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                           
                           {/* Image Token Insertion Buttons */}
                           {inputs.length > 0 && (
-                              <div className="flex justify-end gap-1.5 mt-2" data-interactive="true">
+                              <div className="flex justify-end gap-1.5 mt-2" data-interactive="true" onTouchStart={(e) => e.stopPropagation()}>
                                   {inputs.map((src, i) => {
                                       const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
                                       if (isVideo) return null;
@@ -279,6 +319,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                                           <button 
                                               key={i}
                                               onClick={() => inputRef.current?.insertText(`image ${i + 1}`)}
+                                              onTouchStart={(e) => e.stopPropagation()}
                                               onTouchEnd={(e) => { 
                                                   e.preventDefault(); 
                                                   e.stopPropagation(); 
