@@ -132,15 +132,28 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        // 如果是内部变更或正在组合输入，跳过
+        // 只在初始化或外部强制更新时同步 DOM
+        // 关键：永远不要在用户可能正在输入时重置 innerHTML
         if (isInternalChangeRef.current) {
             isInternalChangeRef.current = false;
             return;
         }
         if (isComposingRef.current) return;
         if (!divRef.current) return;
-        // 如果正在聚焦，不要重置内容
-        if (document.activeElement === divRef.current) return;
+        
+        // iOS Safari 兼容：检查是否有焦点或正在触摸
+        const isFocused = document.activeElement === divRef.current;
+        const hasFocus = divRef.current.contains(document.activeElement);
+        if (isFocused || hasFocus) return;
+        
+        // 额外检查：如果 div 内有选区，也不要重置
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            if (divRef.current.contains(range.commonAncestorContainer)) {
+                return;
+            }
+        }
         
         const currentText = getPlainText(divRef.current);
         if (value !== currentText) {
