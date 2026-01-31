@@ -1,18 +1,16 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
 import { IMAGE_HANDLERS } from '../../services/mode/image/configurations';
 import { LocalEditableTitle, LocalCustomDropdown, LocalInputThumbnails, LocalMediaStack, LoadingOverlay } from './Shared/LocalNodeComponents';
 
-// 导入 ContentEditablePromptInput 的类型
-interface PromptInputHandle {
+export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 简化版的 ContentEditablePromptInput（用于图像节点）
-const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, { 
+const ContentEditablePromptInput = forwardRef<PromptInputHandle, { 
     value: string; 
     onChange: (val: string) => void; 
     placeholder?: string;
@@ -24,21 +22,14 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         return `&nbsp;<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>&nbsp;`;
     };
 
-    React.useImperativeHandle(ref, () => ({
+    useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
-                if (text.startsWith('@')) {
-                    const html = createChipHtml(text);
-                    const success = document.execCommand('insertHTML', false, html);
-                    if (!success) {
-                        onChange(value + text);
-                    }
-                } else {
-                    const success = document.execCommand('insertText', false, text);
-                    if (!success) {
-                        onChange(value + text);
-                    }
+                const html = createChipHtml(text);
+                const success = document.execCommand('insertHTML', false, html);
+                if (!success) {
+                    onChange(value + text);
                 }
             }
         }
@@ -46,7 +37,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const parseTextToHtml = (text: string) => {
         if (!text) return '';
-        const regex = /(@(?:Image|Video|图片|视频)(?:\s+)?\d+)/gi;
+        const regex = /(image\s+\d+)/gi;
         const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         
         return text.split(regex).map(part => {
@@ -106,11 +97,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         onChange(newText);
     };
 
-    const handleBeforeInput = (e: React.FormEvent<HTMLDivElement>) => {
-        // 允许输入继续
-        // 这个事件在移动端输入法中很重要
-    };
-
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
@@ -119,12 +105,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
-    };
-
-    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
-        // 输入法结束时更新
-        const newText = getPlainText(e.currentTarget);
-        onChange(newText);
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -143,17 +123,8 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
-                onBeforeInput={handleBeforeInput}
-                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onTouchStart={(e) => {
-                    e.stopPropagation();
-                    // 确保输入框获得焦点
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
-                }}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text' }}
@@ -202,19 +173,6 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         const models = Object.keys(MODEL_REGISTRY).filter(k => MODEL_REGISTRY[k].category === 'IMAGE');
         setImageModels(models);
     }, []);
-    
-    const insertImageToken = (index: number) => {
-        const url = inputs[index] || '';
-        const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(url);
-        const token = isVideo ? `@Video ${index + 1}` : `@Image ${index + 1}`;
-        
-        if (inputRef.current) {
-            inputRef.current.insertText(token);
-        } else {
-            const currentPrompt = data.prompt || '';
-            updateData(data.id, { prompt: currentPrompt + token });
-        }
-    };
 
     useEffect(() => { 
         checkConfig(); 
@@ -299,7 +257,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
                  <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
                       <div className="flex flex-col" data-interactive="true">
@@ -316,20 +274,25 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               <div className="flex justify-end gap-1.5 mt-2" data-interactive="true">
                                   {inputs.map((src, i) => {
                                       const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
+                                      if (isVideo) return null;
                                       return (
                                           <button 
                                               key={i}
-                                              onClick={() => insertImageToken(i)}
-                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); insertImageToken(i); }}
+                                              onClick={() => inputRef.current?.insertText(`image ${i + 1}`)}
+                                              onTouchEnd={(e) => { 
+                                                  e.preventDefault(); 
+                                                  e.stopPropagation(); 
+                                                  inputRef.current?.insertText(`image ${i + 1}`);
+                                              }}
                                               className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
                                                   isDark 
                                                     ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
                                                     : 'bg-gray-100 hover:bg-gray-200 text-purple-600 border border-gray-200 hover:border-gray-300'
                                               }`}
-                                              title={isVideo ? "Insert video token" : "Insert image token"}
+                                              title="Insert image token"
                                               data-interactive="true"
                                           >
-                                              <span>{isVideo ? `@Video ${i + 1}` : `@Image ${i + 1}`}</span>
+                                              <span>image {i + 1}</span>
                                               <Icons.ArrowRightLeft size={10} className="rotate-45 opacity-60"/>
                                           </button>
                                       );
@@ -337,6 +300,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               </div>
                           )}
                       </div>
+                      
                       <div className="flex items-center justify-between gap-2 h-7">
                           <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
                           <div className={`w-px h-3 ${dividerColor}`}></div>
@@ -348,7 +312,6 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               <button 
                                   className={`h-full px-2 rounded flex items-center justify-center transition-colors ${canOptimize ? (data.promptOptimize ? (isDark ? 'text-cyan-400 bg-cyan-500/10' : 'text-cyan-600 bg-cyan-50') : (isDark ? 'text-zinc-500 hover:text-gray-300 hover:bg-white/5' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100')) : (isDark ? 'text-zinc-700 opacity-50 cursor-not-allowed' : 'text-gray-200 opacity-50 cursor-not-allowed')}`} 
                                   onClick={() => canOptimize && updateData(data.id, { promptOptimize: !data.promptOptimize })}
-                                  onTouchEnd={(e) => { if (canOptimize) { e.preventDefault(); e.stopPropagation(); updateData(data.id, { promptOptimize: !data.promptOptimize }); } }}
                                   title={canOptimize ? `Prompt Optimization: ${data.promptOptimize ? 'ON' : 'OFF'}` : 'Prompt Optimization not supported'}
                                   disabled={!canOptimize}
                                   data-interactive="true"
