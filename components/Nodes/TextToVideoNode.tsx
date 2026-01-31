@@ -180,13 +180,6 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onTouchStart={(e) => {
-                    e.stopPropagation();
-                    // 确保输入框获得焦点
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
-                }}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text' }}
