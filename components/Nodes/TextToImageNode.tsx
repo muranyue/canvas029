@@ -70,7 +70,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        if (divRef.current) {
+        if (divRef.current && document.activeElement !== divRef.current) {
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
