@@ -249,12 +249,12 @@ export const LocalThumbnailItem = memo(({ src, index, isDark }: { src: string, i
     );
 });
 
-export const LocalInputThumbnails = memo(({ inputs, ready, isDark }: { inputs: string[], ready: boolean, isDark: boolean }) => {
+export const LocalInputThumbnails = memo(({ inputs, ready, isDark }: { inputs: { src: string, isVideo: boolean }[], ready: boolean, isDark: boolean }) => {
     if (!inputs || inputs.length === 0) return null;
     return (
        <div className="flex justify-center gap-2 pb-2 overflow-x-auto no-scrollbar min-h-[56px]">
-           {inputs.slice(0, 8).map((src, i) => (
-               ready ? <LocalThumbnailItem key={src + i} src={src} index={i} isDark={isDark} /> : <div key={i} className={`relative w-[48px] h-[48px] flex-shrink-0 border rounded-lg overflow-hidden shadow-sm ${isDark ? 'border-zinc-700 bg-black/40' : 'border-gray-300 bg-gray-100'}`}><div className={`absolute inset-0 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-200'}`} /></div>
+           {inputs.slice(0, 8).map((input, i) => (
+               ready ? <LocalThumbnailItem key={input.src + i} src={input.src} index={i} isDark={isDark} /> : <div key={i} className={`relative w-[48px] h-[48px] flex-shrink-0 border rounded-lg overflow-hidden shadow-sm ${isDark ? 'border-zinc-700 bg-black/40' : 'border-gray-300 bg-gray-100'}`}><div className={`absolute inset-0 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-200'}`} /></div>
            ))}
        </div>
     );

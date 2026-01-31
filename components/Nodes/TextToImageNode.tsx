@@ -20,7 +20,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     const isComposingRef = useRef(false);
 
     const createChipHtml = (text: string) => {
-        return `&nbsp;<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>&nbsp;`;
+        // 添加零宽空格确保光标可以定位到胶囊体后面
+        return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
     useImperativeHandle(ref, () => ({
@@ -34,7 +35,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 const success = document.execCommand('insertHTML', false, html);
                 if (!success) {
                     // 回退方案：直接更新value
-                    onChange(value + ' ' + text + ' ');
+                    onChange(value + text);
                 }
             }
         }
@@ -42,7 +43,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
 
     const parseTextToHtml = (text: string) => {
         if (!text) return '';
-        const regex = /(image\s+\d+)/gi;
+        // Match "@image n" or "@video n" format
+        const regex = /(@(?:image|video)\s+\d+)/gi;
         const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         
         return text.split(regex).map(part => {
@@ -57,7 +59,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         let text = '';
         node.childNodes.forEach(child => {
             if (child.nodeType === Node.TEXT_NODE) {
-                text += child.textContent?.replace(/\u00A0/g, ' ') || '';
+                // 移除零宽空格和非断行空格
+                text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
             } else if (child.nodeType === Node.ELEMENT_NODE) {
                 const el = child as HTMLElement;
                 if (el.classList.contains('chip')) {
@@ -183,7 +186,7 @@ interface TextToImageNodeProps {
   onGenerate: (id: string) => void;
   selected?: boolean;
   showControls?: boolean;
-  inputs?: string[];
+  inputs?: { src: string, isVideo: boolean }[];
   onMaximize?: (id: string) => void;
   onDownload?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -309,35 +312,45 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               placeholder="Enter image description..."
                           />
                           
-                          {/* Image Token Insertion Buttons */}
+                          {/* Image/Video Token Insertion Buttons */}
                           {inputs.length > 0 && (
                               <div className="flex justify-end gap-1.5 mt-2" data-interactive="true" onTouchStart={(e) => e.stopPropagation()}>
-                                  {inputs.map((src, i) => {
-                                      const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
-                                      if (isVideo) return null;
-                                      return (
-                                          <button 
-                                              key={i}
-                                              onClick={() => inputRef.current?.insertText(`image ${i + 1}`)}
-                                              onTouchStart={(e) => e.stopPropagation()}
-                                              onTouchEnd={(e) => { 
-                                                  e.preventDefault(); 
-                                                  e.stopPropagation(); 
-                                                  inputRef.current?.insertText(`image ${i + 1}`);
-                                              }}
-                                              className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
-                                                  isDark 
-                                                    ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
-                                                    : 'bg-gray-100 hover:bg-gray-200 text-purple-600 border border-gray-200 hover:border-gray-300'
-                                              }`}
-                                              title="Insert image token"
-                                              data-interactive="true"
-                                          >
-                                              <span>image {i + 1}</span>
-                                              <Icons.ArrowRightLeft size={10} className="rotate-45 opacity-60"/>
-                                          </button>
-                                      );
-                                  })}
+                                  {(() => {
+                                      let imageCount = 0;
+                                      let videoCount = 0;
+                                      return inputs.map((input, i) => {
+                                          let tokenText: string;
+                                          if (input.isVideo) {
+                                              videoCount++;
+                                              tokenText = `@video ${videoCount}`;
+                                          } else {
+                                              imageCount++;
+                                              tokenText = `@image ${imageCount}`;
+                                          }
+                                          return (
+                                              <button 
+                                                  key={i}
+                                                  onClick={() => inputRef.current?.insertText(tokenText)}
+                                                  onTouchStart={(e) => e.stopPropagation()}
+                                                  onTouchEnd={(e) => { 
+                                                      e.preventDefault(); 
+                                                      e.stopPropagation(); 
+                                                      inputRef.current?.insertText(tokenText);
+                                                  }}
+                                                  className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
+                                                      isDark 
+                                                        ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
+                                                        : 'bg-gray-100 hover:bg-gray-200 text-purple-600 border border-gray-200 hover:border-gray-300'
+                                                  }`}
+                                                  title={input.isVideo ? "Insert video token" : "Insert image token"}
+                                                  data-interactive="true"
+                                              >
+                                                  <span>{tokenText}</span>
+                                                  <Icons.ArrowRightLeft size={10} className="rotate-45 opacity-60"/>
+                                              </button>
+                                          );
+                                      });
+                                  })()}
                               </div>
                           )}
                       </div>

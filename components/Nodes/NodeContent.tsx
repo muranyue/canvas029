@@ -13,7 +13,7 @@ interface NodeContentProps {
   onGenerate: (id: string) => void;
   selected?: boolean;
   showControls?: boolean;
-  inputs?: string[];
+  inputs?: { src: string, isVideo: boolean }[];
   onMaximize?: (id: string) => void;
   onDownload?: (id: string) => void;
   onToolbarAction?: (nodeId: string, action: string) => void;
@@ -51,7 +51,8 @@ export const NodeContent = memo(NodeContentComponent, (prev, next) => {
          if (prev.inputs?.length !== next.inputs?.length) return false;
          if (prev.inputs && next.inputs) { 
              for (let i = 0; i < prev.inputs.length; i++) { 
-                 if (prev.inputs[i] !== next.inputs[i]) return false; 
+                 if (prev.inputs[i].src !== next.inputs[i].src || 
+                     prev.inputs[i].isVideo !== next.inputs[i].isVideo) return false; 
              } 
          }
     }

@@ -12,7 +12,7 @@ import { Minimap } from './components/Minimap';
 
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 240; 
-const EMPTY_ARRAY: string[] = [];
+const EMPTY_ARRAY: { src: string, isVideo: boolean }[] = [];
 
 // Morandi-ish Colored Grays
 const GROUP_COLORS = [
@@ -169,17 +169,102 @@ const CanvasWithSidebar: React.FC = () => {
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   // Memoize inputs map to prevent array recreation on every render
+  // Returns array of { src: string, isVideo: boolean } for each input
   const inputsMap = useMemo(() => {
-    const map: Record<string, string[]> = {};
+    const map: Record<string, { src: string, isVideo: boolean }[]> = {};
     nodes.forEach(node => {
         map[node.id] = connections
             .filter(c => c.targetId === node.id)
             .map(c => nodes.find(n => n.id === c.sourceId))
             .filter(n => n && (n.imageSrc || n.videoSrc))
-            .map(n => n!.imageSrc || n!.videoSrc || '');
+            .map(n => ({
+                src: n!.videoSrc || n!.imageSrc || '',
+                isVideo: !!n!.videoSrc
+            }));
     });
     return map;
   }, [nodes, connections]);
+
+  // Update viewport size on mount and resize (using containerRef for accurate size)
+  useEffect(() => {
+    const updateViewportSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setViewportSize({ width: rect.width, height: rect.height });
+      }
+    };
+    
+    // Initial update after mount
+    const timer = setTimeout(updateViewportSize, 0);
+    window.addEventListener('resize', updateViewportSize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updateViewportSize);
+    };
+  }, []);
+
+  // Calculate visible nodes with buffer zone for smooth scrolling
+  const visibleNodes = useMemo(() => {
+    if (viewportSize.width === 0 || viewportSize.height === 0) return nodes;
+    
+    // Buffer zone: render nodes slightly outside viewport for smooth panning
+    const buffer = 200; // pixels
+    
+    // Calculate viewport bounds in world coordinates
+    const viewportLeft = -transform.x / transform.k - buffer / transform.k;
+    const viewportTop = -transform.y / transform.k - buffer / transform.k;
+    const viewportRight = (viewportSize.width - transform.x) / transform.k + buffer / transform.k;
+    const viewportBottom = (viewportSize.height - transform.y) / transform.k + buffer / transform.k;
+    
+    return nodes.filter(node => {
+      // Check if node intersects with viewport (including buffer)
+      const nodeRight = node.x + node.width;
+      const nodeBottom = node.y + node.height;
+      
+      // Node is visible if it overlaps with viewport
+      return !(nodeRight < viewportLeft || 
+               node.x > viewportRight || 
+               nodeBottom < viewportTop || 
+               node.y > viewportBottom);
+    });
+  }, [nodes, transform, viewportSize]);
+
+  // Set of visible node IDs for quick lookup
+  const visibleNodeIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
+
+  // Calculate visible connections (both source and target must be visible or connection crosses viewport)
+  const visibleConnections = useMemo(() => {
+    if (viewportSize.width === 0 || viewportSize.height === 0) return connections;
+    
+    const buffer = 200;
+    const viewportLeft = -transform.x / transform.k - buffer / transform.k;
+    const viewportTop = -transform.y / transform.k - buffer / transform.k;
+    const viewportRight = (viewportSize.width - transform.x) / transform.k + buffer / transform.k;
+    const viewportBottom = (viewportSize.height - transform.y) / transform.k + buffer / transform.k;
+    
+    return connections.filter(conn => {
+      const source = nodes.find(n => n.id === conn.sourceId);
+      const target = nodes.find(n => n.id === conn.targetId);
+      if (!source || !target) return false;
+      
+      // Connection endpoints
+      const sx = source.x + source.width;
+      const sy = source.y + source.height / 2;
+      const tx = target.x;
+      const ty = target.y + target.height / 2;
+      
+      // Check if connection line intersects viewport (simplified bounding box check)
+      const lineLeft = Math.min(sx, tx);
+      const lineRight = Math.max(sx, tx);
+      const lineTop = Math.min(sy, ty);
+      const lineBottom = Math.max(sy, ty);
+      
+      return !(lineRight < viewportLeft || 
+               lineLeft > viewportRight || 
+               lineBottom < viewportTop || 
+               lineTop > viewportBottom);
+    });
+  }, [connections, nodes, transform, viewportSize]);
 
   const getInputImages = useCallback((nodeId: string) => {
     return inputsMap[nodeId] || EMPTY_ARRAY;
@@ -553,7 +638,7 @@ const CanvasWithSidebar: React.FC = () => {
                     video.preload = 'metadata';
                     video.onloadedmetadata = () => {
                          const { width, height, ratio } = calculateImportDimensions(video.videoWidth, video.videoHeight);
-                         addNode(NodeType.ORIGINAL_IMAGE, worldPos.x, worldPos.y, {
+                         addNode(NodeType.TEXT_TO_VIDEO, worldPos.x, worldPos.y, {
                              width, height, videoSrc: url, title: file.name, aspectRatio: `${ratio}:1`, outputArtifacts: [url]
                          });
                     };
@@ -654,6 +739,7 @@ const CanvasWithSidebar: React.FC = () => {
     updateNodeData(nodeId, { isLoading: true });
     
     const inputs = getInputImages(node.id);
+    const inputSrcs = inputs.map(i => i.src);
 
     try {
       if (node.type === NodeType.CREATIVE_DESC) {
@@ -663,7 +749,7 @@ const CanvasWithSidebar: React.FC = () => {
           let results: string[] = [];
           if (node.type === NodeType.TEXT_TO_IMAGE) {
             results = await generateImage(
-                node.prompt || '', node.aspectRatio, node.model, node.resolution, node.count || 1, inputs 
+                node.prompt || '', node.aspectRatio, node.model, node.resolution, node.count || 1, inputSrcs 
             );
           } else if (node.type === NodeType.TEXT_TO_VIDEO) {
             let effectiveModel = node.model;
@@ -671,7 +757,7 @@ const CanvasWithSidebar: React.FC = () => {
                 effectiveModel = (effectiveModel || '') + '_FL';
             }
             results = await generateVideo(
-                node.prompt || '', inputs, node.aspectRatio, effectiveModel, node.resolution, node.duration, node.count || 1
+                node.prompt || '', inputSrcs, node.aspectRatio, effectiveModel, node.resolution, node.duration, node.count || 1
             );
           }
 
@@ -881,7 +967,7 @@ const CanvasWithSidebar: React.FC = () => {
               video.preload = 'metadata';
               video.onloadedmetadata = () => {
                   const { width, height, ratio } = calculateImportDimensions(video.videoWidth, video.videoHeight);
-                  addNode(NodeType.ORIGINAL_IMAGE, worldPos.x - width/2 + offsetX, worldPos.y - height/2 + offsetY, {
+                  addNode(NodeType.TEXT_TO_VIDEO, worldPos.x - width/2 + offsetX, worldPos.y - height/2 + offsetY, {
                        width, height, videoSrc: url, title: file.name, aspectRatio: `${ratio}:1`, outputArtifacts: [url]
                    });
               };
@@ -1669,7 +1755,7 @@ const CanvasWithSidebar: React.FC = () => {
         >
             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-0">
                 <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
-                    {connections.map(conn => {
+                    {visibleConnections.map(conn => {
                         const source = nodes.find(n => n.id === conn.sourceId);
                         const target = nodes.find(n => n.id === conn.targetId);
                         if (!source || !target) return null;
@@ -1698,7 +1784,7 @@ const CanvasWithSidebar: React.FC = () => {
             </svg>
 
             <div className="absolute origin-top-left will-change-transform" style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}>
-                {nodes.map(node => (
+                {visibleNodes.map(node => (
                     <BaseNode
                         key={node.id}
                         data={node}
