@@ -216,13 +216,13 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     minHeight: '70px', 
                     cursor: 'text',
                     // Mobile Safari/iPad 兼容性修复
-                    WebkitUserModify: 'read-write-plaintext-only',
                     WebkitAppearance: 'none',
                     WebkitTapHighlightColor: 'transparent',
                     fontSize: '16px',  // 防止 iPad 自动缩放（必须 >= 16px）
                     lineHeight: '1.5',
                     WebkitUserSelect: 'text',
                     userSelect: 'text',
+                    // 注意：不要使用 WebkitUserModify，会导致移动端 build 后无法输入
                 } as React.CSSProperties}
             />
             {!value && (
