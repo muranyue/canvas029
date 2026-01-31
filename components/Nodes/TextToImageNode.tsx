@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
@@ -10,135 +10,33 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-const ContentEditablePromptInput = forwardRef<PromptInputHandle, { 
-    value: string; 
-    onChange: (val: string) => void; 
+// 简化版的 ContentEditablePromptInput（用于图像节点）- 使用 execCommand 保持稳定
+const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
+    value: string;
+    onChange: (val: string) => void;
     placeholder?: string;
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
-    const isComposingRef = useRef(false);
-    const lastValueRef = useRef(value);
 
     const createChipHtml = (text: string) => {
-        // 添加零宽空格确保光标可以定位到胶囊体后面
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
-    // 使用现代API插入文本，兼容移动端build
-    const insertTextAtCursor = (text: string, isHtml: boolean = false) => {
-        const div = divRef.current;
-        if (!div) return false;
-        
-        try {
-            const selection = window.getSelection();
-            
-            // 确保有有效的选区
-            if (!selection || selection.rangeCount === 0) {
-                // 创建一个新的选区在末尾
-                const range = document.createRange();
-                range.selectNodeContents(div);
-                range.collapse(false); // 折叠到末尾
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-            }
-            
-            const range = selection?.getRangeAt(0);
-            if (!range) {
-                // 回退：直接追加
-                if (isHtml) {
-                    const temp = document.createElement('div');
-                    temp.innerHTML = text;
-                    while (temp.firstChild) {
-                        div.appendChild(temp.firstChild);
-                    }
-                } else {
-                    div.appendChild(document.createTextNode(text));
-                }
-                return true;
-            }
-            
-            // 确保range在当前div内
-            if (!div.contains(range.commonAncestorContainer)) {
-                const newRange = document.createRange();
-                newRange.selectNodeContents(div);
-                newRange.collapse(false);
-                selection?.removeAllRanges();
-                selection?.addRange(newRange);
-                return insertTextAtCursor(text, isHtml);
-            }
-            
-            range.deleteContents();
-            
-            if (isHtml) {
-                const temp = document.createElement('div');
-                temp.innerHTML = text;
-                const fragment = document.createDocumentFragment();
-                let lastNode: Node | null = null;
-                while (temp.firstChild) {
-                    lastNode = temp.firstChild;
-                    fragment.appendChild(temp.firstChild);
-                }
-                range.insertNode(fragment);
-                // 移动光标到插入内容后面
-                if (lastNode) {
-                    range.setStartAfter(lastNode);
-                    range.setEndAfter(lastNode);
-                }
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-            } else {
-                const textNode = document.createTextNode(text);
-                range.insertNode(textNode);
-                // 移动光标到文本节点后面
-                range.setStartAfter(textNode);
-                range.setEndAfter(textNode);
-                selection?.removeAllRanges();
-                selection?.addRange(range);
-            }
-            
-            return true;
-        } catch (e) {
-            console.warn('insertTextAtCursor failed:', e);
-            // 最终回退：直接追加到末尾
-            if (isHtml) {
-                const temp = document.createElement('div');
-                temp.innerHTML = text;
-                while (temp.firstChild) {
-                    div.appendChild(temp.firstChild);
-                }
-            } else {
-                div.appendChild(document.createTextNode(text));
-            }
-            return true;
-        }
-    };
-
-    useImperativeHandle(ref, () => ({
+    React.useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
             if (divRef.current) {
-                // 先确保聚焦
-                if (document.activeElement !== divRef.current) {
-                    divRef.current.focus();
-                    // 等待焦点生效
-                    requestAnimationFrame(() => {
-                        const html = createChipHtml(text);
-                        if (!insertTextAtCursor(html, true)) {
-                            // 回退方案：直接更新value
-                            onChange(value + text);
-                        } else {
-                            // 触发更新
-                            const newText = getPlainText(divRef.current!);
-                            onChange(newText);
-                        }
-                    });
-                } else {
+                divRef.current.focus();
+                if (text.startsWith('@')) {
                     const html = createChipHtml(text);
-                    if (!insertTextAtCursor(html, true)) {
+                    const success = document.execCommand('insertHTML', false, html);
+                    if (!success) {
                         onChange(value + text);
-                    } else {
-                        const newText = getPlainText(divRef.current);
-                        onChange(newText);
+                    }
+                } else {
+                    const success = document.execCommand('insertText', false, text);
+                    if (!success) {
+                        onChange(value + text);
                     }
                 }
             }
@@ -150,7 +48,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         // Match "@image n" or "@video n" format
         const regex = /(@(?:image|video)\s+\d+)/gi;
         const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
+
         return text.split(regex).map(part => {
             if (part.match(regex)) {
                 return createChipHtml(part);
@@ -163,7 +61,6 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         let text = '';
         node.childNodes.forEach(child => {
             if (child.nodeType === Node.TEXT_NODE) {
-                // 移除零宽空格和非断行空格
                 text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
             } else if (child.nodeType === Node.ELEMENT_NODE) {
                 const el = child as HTMLElement;
@@ -182,9 +79,7 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        lastValueRef.current = value;
-        // 只在非输入状态且非组合输入时同步
-        if (divRef.current && document.activeElement !== divRef.current && !isComposingRef.current) {
+        if (divRef.current) {
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
@@ -192,24 +87,21 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
             if (normalizedValue !== normalizedCurrent) {
                 const newHtml = parseTextToHtml(value);
                 divRef.current.innerHTML = newHtml;
+
+                if (value.length > currentText.length) {
+                    divRef.current.focus();
+                    const range = document.createRange();
+                    range.selectNodeContents(divRef.current);
+                    range.collapse(false);
+                    const sel = window.getSelection();
+                    sel?.removeAllRanges();
+                    sel?.addRange(range);
+                }
             }
         }
     }, [value]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        // 组合输入中不更新
-        if (isComposingRef.current) return;
-        const newText = getPlainText(e.currentTarget);
-        onChange(newText);
-    };
-
-    const handleCompositionStart = () => {
-        isComposingRef.current = true;
-    };
-
-    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
-        isComposingRef.current = false;
-        // 组合输入结束后更新
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
     };
@@ -217,30 +109,16 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
-        // 使用现代API替代execCommand
-        if (!insertTextAtCursor(text, false)) {
-            // 回退：直接追加
-            onChange(value + text);
-        } else {
-            const newText = getPlainText(divRef.current!);
-            onChange(newText);
-        }
+        document.execCommand('insertText', false, text);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
     };
 
-    const handleFocus = () => {
-        // 确保移动端聚焦时光标可见
-        if (divRef.current) {
-            const range = document.createRange();
-            range.selectNodeContents(divRef.current);
-            range.collapse(false);
-            const sel = window.getSelection();
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-        }
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -248,31 +126,27 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
     const textColor = isDark ? 'text-zinc-200' : 'text-gray-900';
 
     return (
-        <div 
+        <div
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => {
                 e.stopPropagation();
-                // 移动端点击时主动聚焦
-                if (divRef.current) {
+                if (divRef.current && document.activeElement !== divRef.current) {
                     divRef.current.focus();
                 }
             }}
             data-interactive="true"
         >
-            <div 
+            <div
                 ref={divRef}
                 className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
+                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onFocus={handleFocus}
-                onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
                 onTouchEnd={(e) => {
-                    // 确保触摸结束时聚焦
                     e.stopPropagation();
                     if (divRef.current && document.activeElement !== divRef.current) {
                         divRef.current.focus();
