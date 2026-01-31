@@ -79,8 +79,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        if (divRef.current && document.activeElement !== divRef.current) {
-            // 只在输入框没有焦点时才同步内容
+        if (divRef.current) {
             const currentText = getPlainText(divRef.current);
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');

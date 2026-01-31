@@ -107,11 +107,8 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
 
     // Sync Props -> DOM
     useEffect(() => {
-        if (divRef.current && document.activeElement !== divRef.current) {
-            // 只在输入框没有焦点时才同步内容
+        if (divRef.current) {
             const currentText = getPlainText(divRef.current);
-            // Loose comparison to avoid cursor jumping on every tiny re-render if content is effectively same
-            // Normalize spaces for comparison
             const normalizedValue = value.replace(/\s+/g, ' ');
             const normalizedCurrent = currentText.replace(/\s+/g, ' ');
 
@@ -119,7 +116,6 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
                 const newHtml = parseTextToHtml(value);
                 divRef.current.innerHTML = newHtml;
                 
-                // If value length increased significantly (e.g. chip added), move caret to end
                 if (value.length > currentText.length) {
                      moveCaretToEnd(divRef.current);
                 }
