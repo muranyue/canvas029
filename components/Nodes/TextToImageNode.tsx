@@ -196,7 +196,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         >
             <div
                 ref={divRef}
-                className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`w-full flex-1 p-3 font-sans outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
                 onCompositionStart={handleCompositionStart}
@@ -211,7 +211,19 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 }}
                 suppressContentEditableWarning
                 spellCheck={false}
-                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
+                style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    minHeight: '70px', 
+                    cursor: 'text',
+                    // Mobile Safari/iPad 兼容性修复
+                    WebkitUserModify: 'read-write-plaintext-only',
+                    WebkitAppearance: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    fontSize: '16px',  // 防止 iPad 自动缩放（必须 >= 16px）
+                    lineHeight: '1.5',
+                    WebkitUserSelect: 'text',
+                    userSelect: 'text',
+                } as React.CSSProperties}
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>

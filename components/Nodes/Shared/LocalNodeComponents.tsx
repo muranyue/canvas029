@@ -1,7 +1,91 @@
 
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { Icons } from '../../Icons';
 import { NodeData } from '../../../types';
+
+// --- 缩略图缓存 ---
+export const thumbnailCache = new Map<string, string>();
+
+// 生成缩略图的函数
+// maxSize: 1024 (1k) - 大于1k的图片缩放到1k，小于1k的保持原尺寸
+export const generateThumbnail = (src: string, maxSize: number = 1024): Promise<string> => {
+    return new Promise((resolve) => {
+        // 检查缓存
+        const cacheKey = `${src}_${maxSize}`;
+        if (thumbnailCache.has(cacheKey)) {
+            resolve(thumbnailCache.get(cacheKey)!);
+            return;
+        }
+        
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let { width, height } = img;
+            
+            // 如果图片小于等于maxSize，直接返回原图
+            if (width <= maxSize && height <= maxSize) {
+                resolve(src);
+                return;
+            }
+            
+            // 计算缩放比例，保持1k清晰度
+            const scale = Math.min(maxSize / width, maxSize / height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // 使用更高质量的压缩
+                const thumbnail = canvas.toDataURL('image/jpeg', 0.85);
+                thumbnailCache.set(cacheKey, thumbnail);
+                resolve(thumbnail);
+            } else {
+                resolve(src);
+            }
+        };
+        img.onerror = () => resolve(src);
+        img.src = src;
+    });
+};
+
+// 缩略图 Hook
+// 默认maxSize为1024 (1k)
+export const useThumbnail = (src: string | undefined, maxSize: number = 1024) => {
+    const [thumbnail, setThumbnail] = useState<string | undefined>(src);
+    
+    useEffect(() => {
+        if (!src) {
+            setThumbnail(undefined);
+            return;
+        }
+        
+        // 视频不生成缩略图
+        if (/\.(mp4|webm|mov|mkv)(\?|$)/i.test(src)) {
+            setThumbnail(src);
+            return;
+        }
+        
+        // 检查缓存
+        const cacheKey = `${src}_${maxSize}`;
+        if (thumbnailCache.has(cacheKey)) {
+            setThumbnail(thumbnailCache.get(cacheKey)!);
+            return;
+        }
+        
+        // 生成缩略图
+        generateThumbnail(src, maxSize).then(setThumbnail);
+    }, [src, maxSize]);
+    
+    return thumbnail;
+};
 
 // --- Local Components (Extracted) ---
 
@@ -298,6 +382,9 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
     const artifacts = data.outputArtifacts || [];
     const sortedArtifacts = currentSrc ? [currentSrc, ...artifacts.filter(a => a !== currentSrc)] : artifacts;
     const showBadge = !data.isStackOpen && artifacts.length > 1;
+    
+    // 使用缩略图 - 节点内显示缩略图（1k清晰度），放大时显示原图
+    const thumbnail = useThumbnail(currentSrc, 1024);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => { if (data.isStackOpen && stackRef.current && !stackRef.current.contains(event.target as Node)) updateData(data.id, { isStackOpen: false }); };
@@ -341,7 +428,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
            {isVideo ? (
                currentSrc && <VideoPreview src={currentSrc} isDark={isDark || false} />
            ) : (
-               currentSrc && <img src={currentSrc} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
+               thumbnail && <img src={thumbnail} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
            )}
            {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} data-interactive="true"><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{artifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
         </>
