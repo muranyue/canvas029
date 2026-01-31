@@ -49,38 +49,88 @@ const ContentEditablePromptInput = forwardRef<PromptInputHandle, {
         const div = divRef.current;
         if (!div) return false;
         
-        const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) {
-            // 没有选区时，追加到末尾
+        try {
+            const selection = window.getSelection();
+            
+            // 确保有有效的选区
+            if (!selection || selection.rangeCount === 0) {
+                // 创建一个新的选区在末尾
+                const range = document.createRange();
+                range.selectNodeContents(div);
+                range.collapse(false); // 折叠到末尾
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+            }
+            
+            const range = selection?.getRangeAt(0);
+            if (!range) {
+                // 回退：直接追加
+                if (isHtml) {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = text;
+                    while (temp.firstChild) {
+                        div.appendChild(temp.firstChild);
+                    }
+                } else {
+                    div.appendChild(document.createTextNode(text));
+                }
+                return true;
+            }
+            
+            // 确保range在当前div内
+            if (!div.contains(range.commonAncestorContainer)) {
+                const newRange = document.createRange();
+                newRange.selectNodeContents(div);
+                newRange.collapse(false);
+                selection?.removeAllRanges();
+                selection?.addRange(newRange);
+                return insertTextAtCursor(text, isHtml);
+            }
+            
+            range.deleteContents();
+            
             if (isHtml) {
-                div.innerHTML += text;
+                const temp = document.createElement('div');
+                temp.innerHTML = text;
+                const fragment = document.createDocumentFragment();
+                let lastNode: Node | null = null;
+                while (temp.firstChild) {
+                    lastNode = temp.firstChild;
+                    fragment.appendChild(temp.firstChild);
+                }
+                range.insertNode(fragment);
+                // 移动光标到插入内容后面
+                if (lastNode) {
+                    range.setStartAfter(lastNode);
+                    range.setEndAfter(lastNode);
+                }
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+            } else {
+                const textNode = document.createTextNode(text);
+                range.insertNode(textNode);
+                // 移动光标到文本节点后面
+                range.setStartAfter(textNode);
+                range.setEndAfter(textNode);
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+            }
+            
+            return true;
+        } catch (e) {
+            console.warn('insertTextAtCursor failed:', e);
+            // 最终回退：直接追加到末尾
+            if (isHtml) {
+                const temp = document.createElement('div');
+                temp.innerHTML = text;
+                while (temp.firstChild) {
+                    div.appendChild(temp.firstChild);
+                }
             } else {
                 div.appendChild(document.createTextNode(text));
             }
             return true;
         }
-        
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        
-        if (isHtml) {
-            const fragment = range.createContextualFragment(text);
-            range.insertNode(fragment);
-            // 移动光标到插入内容后面
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        } else {
-            const textNode = document.createTextNode(text);
-            range.insertNode(textNode);
-            // 移动光标到文本节点后面
-            range.setStartAfter(textNode);
-            range.setEndAfter(textNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-        }
-        
-        return true;
     };
 
     // Helper to get Plain Text from DOM
