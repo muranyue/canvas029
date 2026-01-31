@@ -72,9 +72,11 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         const sel = window.getSelection();
         if (!sel) return;
         
+        // 确保有选区
         let range: Range;
         if (sel.rangeCount > 0) {
             range = sel.getRangeAt(0);
+            // 确保选区在当前 div 内
             if (!div.contains(range.commonAncestorContainer)) {
                 range = document.createRange();
                 range.selectNodeContents(div);
@@ -112,6 +114,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
+        // 标记为内部变更，防止 useEffect 重置
         isInternalChangeRef.current = true;
         const newText = getPlainText(div);
         onChange(newText);
@@ -121,6 +124,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
+                // 使用 setTimeout 确保 focus 生效
                 setTimeout(() => {
                     if (text.startsWith('@')) {
                         insertAtCursor(createChipHtml(text), true);
@@ -146,12 +150,14 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
+        // 如果是内部变更或正在组合输入，跳过
         if (isInternalChangeRef.current) {
             isInternalChangeRef.current = false;
             return;
         }
         if (isComposingRef.current) return;
         if (!divRef.current) return;
+        // 如果正在聚焦，不要重置内容
         if (document.activeElement === divRef.current) return;
         
         const currentText = getPlainText(divRef.current);
@@ -161,6 +167,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     }, [value]);
 
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        // 组合输入中不更新
         if (isComposingRef.current) return;
         isInternalChangeRef.current = true;
         const newText = getPlainText(e.currentTarget);
@@ -197,30 +204,32 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[80px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+                e.stopPropagation();
+                if (divRef.current && document.activeElement !== divRef.current) {
+                    divRef.current.focus();
+                }
+            }}
             data-interactive="true"
         >
             <div 
                 ref={divRef}
-                className={`w-full flex-1 p-3 font-sans outline-none overflow-y-auto max-h-[120px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`w-full flex-1 p-3 text-xs font-sans leading-7 outline-none overflow-y-auto max-h-[120px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (divRef.current && document.activeElement !== divRef.current) {
+                        divRef.current.focus();
+                    }
+                }}
                 suppressContentEditableWarning
                 spellCheck={false}
-                style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    minHeight: '80px', 
-                    cursor: 'text',
-                    fontSize: '16px',
-                    lineHeight: '1.75',
-                    WebkitUserSelect: 'text',
-                    userSelect: 'text',
-                } as React.CSSProperties}
-                data-interactive="true"
+                style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-xs font-sans leading-7 ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>

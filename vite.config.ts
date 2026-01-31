@@ -18,12 +18,6 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      build: {
-        // 临时禁用压缩来测试是否是压缩导致 iOS contentEditable 问题
-        minify: false,
-        // 生成 sourcemap 便于调试
-        sourcemap: true,
-      },
+      }
     };
 });

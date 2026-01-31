@@ -132,28 +132,15 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        // 只在初始化或外部强制更新时同步 DOM
-        // 关键：永远不要在用户可能正在输入时重置 innerHTML
+        // 如果是内部变更或正在组合输入，跳过
         if (isInternalChangeRef.current) {
             isInternalChangeRef.current = false;
             return;
         }
         if (isComposingRef.current) return;
         if (!divRef.current) return;
-        
-        // iOS Safari 兼容：检查是否有焦点或正在触摸
-        const isFocused = document.activeElement === divRef.current;
-        const hasFocus = divRef.current.contains(document.activeElement);
-        if (isFocused || hasFocus) return;
-        
-        // 额外检查：如果 div 内有选区，也不要重置
-        const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            if (divRef.current.contains(range.commonAncestorContainer)) {
-                return;
-            }
-        }
+        // 如果正在聚焦，不要重置内容
+        if (document.activeElement === divRef.current) return;
         
         const currentText = getPlainText(divRef.current);
         if (value !== currentText) {
@@ -199,30 +186,32 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+                e.stopPropagation();
+                if (divRef.current && document.activeElement !== divRef.current) {
+                    divRef.current.focus();
+                }
+            }}
             data-interactive="true"
         >
             <div
                 ref={divRef}
-                className={`w-full flex-1 p-3 font-sans outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (divRef.current && document.activeElement !== divRef.current) {
+                        divRef.current.focus();
+                    }
+                }}
                 suppressContentEditableWarning
                 spellCheck={false}
-                style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    minHeight: '70px', 
-                    cursor: 'text',
-                    fontSize: '16px',
-                    lineHeight: '1.5',
-                    WebkitUserSelect: 'text',
-                    userSelect: 'text',
-                } as React.CSSProperties}
-                data-interactive="true"
+                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
             {!value && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
