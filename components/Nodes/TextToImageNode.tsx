@@ -302,8 +302,40 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
             <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
                  <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
-                      <div className="relative group/input">
-                          <textarea className={`w-full border rounded-xl p-3 text-[10px] leading-relaxed resize-none focus:outline-none min-h-[70px] no-scrollbar ${inputBg}`} placeholder="Enter image description..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} data-interactive="true" />
+                      <div className="flex flex-col" data-interactive="true">
+                          <ContentEditablePromptInput 
+                              ref={inputRef}
+                              value={data.prompt || ''} 
+                              onChange={(val) => updateData(data.id, { prompt: val })} 
+                              isDark={isDark}
+                              placeholder="Enter image description..."
+                          />
+                          
+                          {/* Image Token Insertion Buttons */}
+                          {inputs.length > 0 && (
+                              <div className="flex justify-end gap-1.5 mt-2" data-interactive="true">
+                                  {inputs.map((src, i) => {
+                                      const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
+                                      return (
+                                          <button 
+                                              key={i}
+                                              onClick={() => insertImageToken(i)}
+                                              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); insertImageToken(i); }}
+                                              className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
+                                                  isDark 
+                                                    ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
+                                                    : 'bg-gray-100 hover:bg-gray-200 text-purple-600 border border-gray-200 hover:border-gray-300'
+                                              }`}
+                                              title={isVideo ? "Insert video token" : "Insert image token"}
+                                              data-interactive="true"
+                                          >
+                                              <span>{isVideo ? `@Video ${i + 1}` : `@Image ${i + 1}`}</span>
+                                              <Icons.ArrowRightLeft size={10} className="rotate-45 opacity-60"/>
+                                          </button>
+                                      );
+                                  })}
+                              </div>
+                          )}
                       </div>
                       <div className="flex items-center justify-between gap-2 h-7">
                           <LocalCustomDropdown options={imageModels} value={data.model || 'BananaPro'} onChange={(val: any) => updateData(data.id, { model: val })} isOpen={activeDropdown === 'model'} onToggle={() => setActiveDropdown(activeDropdown === 'model' ? null : 'model')} onClose={() => setActiveDropdown(null)} align="left" width="w-[120px]" isDark={isDark} />
