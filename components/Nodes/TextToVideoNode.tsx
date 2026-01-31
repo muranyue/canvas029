@@ -403,41 +403,8 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                       </div>
                   )}
 
-                  <div className="flex flex-col" data-interactive="true">
-                      <ContentEditablePromptInput 
-                          ref={inputRef}
-                          value={data.prompt || ''} 
-                          onChange={(val) => updateData(data.id, { prompt: val })} 
-                          isDark={isDark}
-                          placeholder="Describe the video scene..."
-                      />
-                      
-                      {/* Image Token Insertion Buttons - Moved Below Input to Separate Line */}
-                      {inputs.length > 0 && (
-                          <div className="flex justify-end gap-1.5 mt-2" data-interactive="true">
-                              {inputs.map((src, i) => {
-                                  // Re-check type just for button rendering consistency
-                                  const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
-                                  return (
-                                      <button 
-                                          key={i}
-                                          onClick={() => insertImageToken(i)}
-                                          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); insertImageToken(i); }}
-                                          className={`px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm ${
-                                              isDark 
-                                                ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-400 border border-zinc-700 hover:border-zinc-600' 
-                                                : 'bg-gray-100 hover:bg-gray-200 text-purple-600 border border-gray-200 hover:border-gray-300'
-                                          }`}
-                                          title={isVideo ? "Insert video token" : "Insert image token"}
-                                          data-interactive="true"
-                                      >
-                                          <span>{isVideo ? `@Video ${i + 1}` : `@Image ${i + 1}`}</span>
-                                          <Icons.ArrowRightLeft size={10} className="rotate-45 opacity-60"/>
-                                      </button>
-                                  );
-                              })}
-                          </div>
-                      )}
+                  <div className="relative group/input">
+                      <textarea className={`w-full border rounded-xl p-3 text-xs leading-7 resize-none focus:outline-none min-h-[80px] no-scrollbar ${inputBg}`} placeholder="Describe the video scene..." value={data.prompt || ''} onChange={(e) => updateData(data.id, { prompt: e.target.value })} onWheel={(e) => e.stopPropagation()} data-interactive="true" />
                   </div>
 
                   <div className="h-px w-full my-1 opacity-50 bg-gradient-to-r from-transparent via-gray-500/20 to-transparent"></div>
