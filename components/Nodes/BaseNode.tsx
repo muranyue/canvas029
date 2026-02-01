@@ -122,7 +122,7 @@ const BaseNode: React.FC<BaseNodeProps> = ({
 
   return (
     <div 
-      className={`absolute flex flex-col group`}
+      className={`absolute flex flex-col group select-none`}
       style={{
         left: data.x,
         top: data.y,
@@ -130,9 +130,12 @@ const BaseNode: React.FC<BaseNodeProps> = ({
         height: data.height,
         zIndex, 
         overflow: 'visible',
-        pointerEvents: isGroup && !selected ? 'auto' : 'auto'
+        pointerEvents: isGroup && !selected ? 'auto' : 'auto',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
       onContextMenu={onContextMenu}
+      onDragStart={(e) => e.preventDefault()}
     >
       {/* Selection Border - Groups handle their own selection border in GroupNode to encompass header */}
       {selected && !isGroup && (

@@ -36,6 +36,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
+    const isComposingRef = useRef(false);
+    const isFocusingRef = useRef(false);
+    const [showPlaceholder, setShowPlaceholder] = useState(true);
 
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
@@ -156,11 +159,22 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 divRef.current.innerHTML = parseTextToHtml(value);
             }
         }
+        // 同步更新 placeholder 状态
+        setShowPlaceholder(!value || value.trim().length === 0);
     }, [value]);
 
+    const updatePlaceholderVisibility = useCallback(() => {
+        if (divRef.current) {
+            const text = getPlainText(divRef.current).trim();
+            setShowPlaceholder(text.length === 0);
+        }
+    }, []);
+
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        if (isComposingRef.current) return;
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
+        updatePlaceholderVisibility();
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -171,11 +185,67 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
+        
+        // iOS 删除胶囊体时的光标修复
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                const container = range.startContainer;
+                
+                // 检查是否在胶囊体旁边
+                if (container.nodeType === Node.TEXT_NODE && container.textContent === '\u200B') {
+                    const prev = container.previousSibling as HTMLElement;
+                    if (prev && prev.classList?.contains('chip')) {
+                        e.preventDefault();
+                        prev.parentNode?.removeChild(prev);
+                        container.parentNode?.removeChild(container);
+                        const newText = getPlainText(divRef.current!);
+                        onChange(newText);
+                        updatePlaceholderVisibility();
+                        
+                        // 延迟恢复光标到末尾
+                        setTimeout(() => {
+                            if (divRef.current) {
+                                const newRange = document.createRange();
+                                newRange.selectNodeContents(divRef.current);
+                                newRange.collapse(false);
+                                sel.removeAllRanges();
+                                sel.addRange(newRange);
+                            }
+                        }, 0);
+                        return;
+                    }
+                }
+            }
+            // 延迟更新 placeholder 状态
+            setTimeout(updatePlaceholderVisibility, 0);
+        }
+    };
+
+    const handleCompositionStart = () => {
+        isComposingRef.current = true;
     };
 
     const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        isComposingRef.current = false;
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
+    };
+
+    // iOS 专用：防止键盘弹出后被收回
+    const handleFocus = () => {
+        isFocusingRef.current = true;
+        setTimeout(() => {
+            isFocusingRef.current = false;
+        }, 300);
+    };
+
+    const handleBlur = () => {
+        // 如果正在聚焦过程中，阻止 blur
+        if (isFocusingRef.current) {
+            divRef.current?.focus();
+        }
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -189,9 +259,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => {
                 e.stopPropagation();
-                if (divRef.current && document.activeElement !== divRef.current) {
-                    divRef.current.focus();
-                }
             }}
             data-interactive="true"
         >
@@ -202,18 +269,24 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
                 onTouchEnd={(e) => {
                     e.stopPropagation();
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
+                    // iOS: 延迟 focus 以避免键盘弹出后被收回
+                    setTimeout(() => {
+                        if (divRef.current && document.activeElement !== divRef.current) {
+                            divRef.current.focus();
+                        }
+                    }, 10);
                 }}
                 suppressContentEditableWarning
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
-            {!value && (
+            {showPlaceholder && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-xs font-sans leading-7 ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
                     {placeholder}
                 </div>
@@ -504,7 +577,22 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                               <Icons.Sparkles size={13} fill={data.promptOptimize && canOptimize ? "currentColor" : "none"} />
                           </button>
                        </div>
-                       <button onClick={() => onGenerate(data.id)} onTouchEnd={(e) => { if (!data.isLoading && isConfigured) { e.preventDefault(); e.stopPropagation(); onGenerate(data.id); } }} className={`ml-auto relative h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 overflow-hidden min-w-[90px] ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} disabled={data.isLoading || !isConfigured} title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'} data-interactive="true">
+                       <button 
+                           onClick={(e) => { 
+                               // 防止 iOS 上 onClick 和 onTouchEnd 双重触发
+                               if ((e as any).nativeEvent?.pointerType === 'touch') return;
+                               if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                           }} 
+                           onTouchEnd={(e) => { 
+                               e.preventDefault(); 
+                               e.stopPropagation(); 
+                               if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                           }} 
+                           className={`ml-auto relative h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 overflow-hidden min-w-[90px] ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} 
+                           disabled={data.isLoading || !isConfigured} 
+                           title={!isConfigured ? 'Configure API Key in Settings' : 'Generate'} 
+                           data-interactive="true"
+                       >
                           {data.isLoading && <div className="absolute left-0 top-0 h-full bg-cyan-500/30 z-0 transition-all duration-300 ease-linear" style={{ width: `${progress}%` }}><div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent w-[200%] animate-[shimmer_2s_infinite]"></div></div>}
                           <div className="relative z-10 flex items-center gap-1.5">{data.isLoading ? <span className="tabular-nums">{Math.floor(progress)}%</span> : <><Icons.Wand2 size={12} /><span>Generate</span></>}</div>
                       </button>

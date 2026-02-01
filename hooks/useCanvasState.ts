@@ -12,9 +12,45 @@ const loadState = <T,>(key: string, fallback: T): T => {
     }
 };
 
+// Helper to load nodes and reset isLoading state
+const loadNodes = (): NodeData[] => {
+    const nodes = loadState<NodeData[]>('canvas_nodes', []);
+    // Reset isLoading to false for all nodes on page load
+    // Also clear blob URLs as they become invalid after page refresh
+    return nodes.map(node => {
+        const updates: Partial<NodeData> = { isLoading: false };
+        
+        // Check if imageSrc is a blob URL (invalid after refresh)
+        if (node.imageSrc && node.imageSrc.startsWith('blob:')) {
+            updates.imageSrc = undefined;
+        }
+        
+        // Check if videoSrc is a blob URL (invalid after refresh)
+        if (node.videoSrc && node.videoSrc.startsWith('blob:')) {
+            updates.videoSrc = undefined;
+        }
+        
+        // Filter out blob URLs from outputArtifacts
+        if (node.outputArtifacts && node.outputArtifacts.length > 0) {
+            const validArtifacts = node.outputArtifacts.filter(url => !url.startsWith('blob:'));
+            updates.outputArtifacts = validArtifacts;
+            
+            // If current src was blob and we have valid artifacts, use the first one
+            if (updates.imageSrc === undefined && validArtifacts.length > 0 && node.type !== 'TEXT_TO_VIDEO') {
+                updates.imageSrc = validArtifacts[0];
+            }
+            if (updates.videoSrc === undefined && validArtifacts.length > 0 && node.type === 'TEXT_TO_VIDEO') {
+                updates.videoSrc = validArtifacts[0];
+            }
+        }
+        
+        return { ...node, ...updates };
+    });
+};
+
 export const useCanvasState = () => {
     // Core state from localStorage
-    const [nodes, setNodes] = useState<NodeData[]>(() => loadState('canvas_nodes', []));
+    const [nodes, setNodes] = useState<NodeData[]>(() => loadNodes());
     const [connections, setConnections] = useState<Connection[]>(() => loadState('canvas_connections', []));
     const [transform, setTransform] = useState<CanvasTransform>(() => loadState('canvas_transform', { x: 0, y: 0, k: 1 }));
     const [canvasBg, setCanvasBg] = useState<string>(() => loadState('canvas_bg', '#0B0C0E'));
