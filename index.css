@@ -169,3 +169,87 @@
     word-break: break-word;
     overflow-wrap: break-word;
 }
+
+
+/* ============================================
+   iOS 按钮触摸事件修复 - 解决 build 后按钮不生效
+   ============================================ */
+
+/* 确保所有按钮在 iOS 上可点击 */
+button,
+[role="button"],
+[data-interactive="true"] {
+    /* 确保触摸事件可以穿透 */
+    pointer-events: auto !important;
+    /* iOS 触摸优化 */
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: transparent !important;
+    /* 确保元素可见且可交互 */
+    cursor: pointer !important;
+}
+
+/* iOS Safari 特定修复 */
+@supports (-webkit-touch-callout: none) {
+    /* 修复 iOS 上 button 元素的触摸问题 */
+    button {
+        -webkit-appearance: none !important;
+        appearance: none !important;
+    }
+    
+    /* 确保 pointer-events-auto 类生效 */
+    .pointer-events-auto {
+        pointer-events: auto !important;
+    }
+    
+    /* 修复 backdrop-blur 可能导致的触摸穿透问题 */
+    .backdrop-blur-md,
+    .backdrop-blur-sm,
+    .backdrop-blur-xl {
+        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(12px);
+        /* 确保触摸事件正常 */
+        pointer-events: auto;
+    }
+    
+    /* 修复 fixed 定位元素的触摸问题 */
+    .fixed {
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+    }
+    
+    /* 确保模态框关闭按钮可点击 */
+    [class*="z-[100]"] button,
+    [class*="z-[200]"] button {
+        pointer-events: auto !important;
+        touch-action: manipulation !important;
+        position: relative !important;
+        z-index: 1 !important;
+    }
+}
+
+/* 移动端触摸区域优化 */
+@media (hover: none) and (pointer: coarse) {
+    /* 增大触摸目标 */
+    button,
+    [role="button"],
+    [data-interactive="true"] {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    
+    /* 小按钮使用 padding 扩大触摸区域 */
+    button.p-1,
+    button.p-2 {
+        position: relative;
+    }
+    
+    button.p-1::before,
+    button.p-2::before {
+        content: '';
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        bottom: -8px;
+        left: -8px;
+    }
+}
