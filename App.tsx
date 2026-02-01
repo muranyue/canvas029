@@ -1139,13 +1139,19 @@ const CanvasWithSidebar: React.FC = () => {
                     <div className={`flex items-center gap-3 px-3 py-1.5 rounded-full shadow-lg pointer-events-auto border backdrop-blur-md ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700 text-gray-300' : 'bg-white/90 border-gray-200 text-gray-600'}`}>
                         <button
                             onClick={() => canvasState.setShowMinimap(!showMinimap)}
+                            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); canvasState.setShowMinimap(!showMinimap); }}
                             className={`hidden md:block p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'} ${showMinimap ? (isDark ? 'text-cyan-400' : 'text-cyan-600') : ''}`}
                             title={showMinimap ? "Hide Minimap" : "Show Minimap"}
                         >
                             <Icons.Map size={16} />
                         </button>
                         <div className={`hidden md:block w-px h-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`}></div>
-                        <button onClick={handleResetZoom} className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'}`} title="Reset Zoom (100%)">
+                        <button 
+                            onClick={handleResetZoom} 
+                            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleResetZoom(); }}
+                            className={`p-1 rounded-full transition-colors ${isDark ? 'hover:bg-zinc-700 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-black'}`} 
+                            title="Reset Zoom (100%)"
+                        >
                             <Icons.Maximize2 size={16} />
                         </button>
                         <input type="range" min="0.4" max="2" step="0.1" value={transform.k} onChange={handleZoom} className="w-20 h-1 accent-cyan-500 cursor-pointer" />
