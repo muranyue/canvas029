@@ -222,16 +222,18 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
+    const textColor = isDark ? 'text-gray-200' : 'text-gray-900';
 
     return (
         <div 
-            className={`editable-wrapper relative w-full min-h-[80px] group/input border rounded-xl flex flex-col ${containerBg} ${borderColor}`}
+            className={`editable-wrapper ${isDark ? 'dark' : 'light'} ${textColor} relative w-full min-h-[80px] group/input border rounded-xl flex flex-col ${containerBg} ${borderColor}`}
             style={{
                 // iOS 兼容：父容器兜底样式
                 overflow: 'visible',
                 transform: 'none',
                 WebkitTransform: 'none',
                 height: 'auto',
+                color: isDark ? '#e4e4e7' : '#18181b',
             }}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -244,7 +246,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onPaste={handlePaste}
                 onKeyDown={handleKeyDown}
                 onTouchEnd={handleTouchEnd}
-                className={`editable-input w-full flex-1 outline-none overflow-y-auto max-h-[120px] relative z-10 ${isDark ? 'node-scroll-dark editable-input-dark' : 'node-scroll editable-input-light'}`}
+                className={`editable-input w-full flex-1 outline-none overflow-y-auto max-h-[120px] relative z-10 md:z-10 z-[80] ${isDark ? 'node-scroll-dark editable-input-dark' : 'node-scroll editable-input-light'}`}
                 style={{ 
                     whiteSpace: 'pre-wrap', 
                     minHeight: '80px', 
@@ -256,7 +258,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     padding: '12px',
                     WebkitTextSizeAdjust: '100%',
                     caretColor: 'auto',
-                }}
+                    color: isDark ? '#e4e4e7' : '#18181b',
+                    WebkitTextFillColor: isDark ? '#e4e4e7' : '#18181b',
+                } as React.CSSProperties}
                 disabled={false}
                 spellCheck={false}
             />

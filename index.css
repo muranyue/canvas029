@@ -9,8 +9,9 @@
 
 /* 通用 editable-input 样式 - 解决「输入了但看不见」的核心问题 */
 .editable-input {
-    /* 强制文字渲染 */
-    -webkit-text-fill-color: currentColor !important;
+    /* iOS 真机文字颜色修复 - 强制显式颜色而非 currentColor */
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
     opacity: 1 !important;
     visibility: visible !important;
     
@@ -43,22 +44,35 @@
     touch-action: auto !important;
 }
 
-/* 深色模式 */
+/* 深色模式 - iOS 真机显式颜色 */
 .editable-input-dark {
     color: #e4e4e7 !important;
     -webkit-text-fill-color: #e4e4e7 !important;
+    background-color: transparent !important;
 }
 
-/* 浅色模式 */
+/* 浅色模式 - iOS 真机显式颜色 */
 .editable-input-light {
     color: #18181b !important;
     -webkit-text-fill-color: #18181b !important;
+    background-color: transparent !important;
 }
 
-/* 父容器样式 */
+/* 父容器样式 - iOS 真机文字颜色继承修复 */
 .editable-wrapper {
     overflow: visible !important;
     height: auto !important;
+    color: inherit !important;
+}
+
+/* 深色模式父容器 */
+.editable-wrapper.dark {
+    color: #e4e4e7 !important;
+}
+
+/* 浅色模式父容器 */
+.editable-wrapper.light {
+    color: #18181b !important;
 }
 
 /* ============================================
@@ -76,6 +90,9 @@
     user-select: text !important;
     /* 关键：允许键盘弹起 */
     touch-action: auto !important;
+    /* iOS 真机文字颜色显式设置 */
+    color: inherit !important;
+    -webkit-text-fill-color: inherit !important;
 }
 
 /* ============================================
@@ -88,6 +105,23 @@
         -webkit-tap-highlight-color: transparent;
         -webkit-user-select: text;
         user-select: text;
+        /* iOS 真机文字颜色强制修复 */
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+    }
+    
+    /* 深色模式 iOS 真机修复 */
+    [contenteditable="true"].editable-input-dark,
+    .editable-input.editable-input-dark {
+        color: #e4e4e7 !important;
+        -webkit-text-fill-color: #e4e4e7 !important;
+    }
+    
+    /* 浅色模式 iOS 真机修复 */
+    [contenteditable="true"].editable-input-light,
+    .editable-input.editable-input-light {
+        color: #18181b !important;
+        -webkit-text-fill-color: #18181b !important;
     }
     
     textarea,
