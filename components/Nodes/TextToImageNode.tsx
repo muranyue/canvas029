@@ -11,7 +11,7 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 使用 react-contenteditable 的 ContentEditablePromptInput - iOS 兼容性已由库处理
+// 使用 react-contenteditable 的 ContentEditablePromptInput - iOS 生产环境兼容性优化版本
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
@@ -21,12 +21,12 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const contentEditableRef = useRef<HTMLElement>(null);
     const htmlRef = useRef<string>('');
 
-    // 创建 chip HTML
+    // 创建 chip HTML - 保留 chip 功能
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
-    // 从 HTML 提取纯文本
+    // 从 HTML 提取纯文本 - 保留 chip 的 data-value
     const htmlToPlainText = (html: string): string => {
         const temp = document.createElement('div');
         temp.innerHTML = html;
@@ -78,13 +78,46 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         }
     }, [value]);
 
-    // 处理内容变化
+    // iOS 兼容：组件挂载后强制配置属性
+    useEffect(() => {
+        const domNode = contentEditableRef.current;
+        if (!domNode) return;
+        
+        domNode.contentEditable = 'true';
+        domNode.spellcheck = false;
+        domNode.setAttribute('autocorrect', 'off');
+        domNode.setAttribute('autocapitalize', 'off');
+        domNode.style.position = 'relative';
+        domNode.style.zIndex = '1';
+    }, []);
+
+    // iOS 兼容：处理内容变化 + 强制重绘
     const handleChange = useCallback((evt: ContentEditableEvent) => {
-        const newHtml = evt.target.value;
+        let newHtml = evt.target.value || '';
+        
+        // iOS 兼容：清理非 chip 的 span 标签
+        newHtml = newHtml
+            .replace(/<span(?![^>]*class="[^"]*chip[^"]*")[^>]*>(.*?)<\/span>/gi, '$1')
+            .replace(/&nbsp;/gi, ' ');
+        
         htmlRef.current = newHtml;
         const plainText = htmlToPlainText(newHtml);
         onChange(plainText);
+        
+        // iOS 兼容：强制触发 DOM 重绘
+        const el = contentEditableRef.current;
+        if (el) {
+            el.style.display = 'none';
+            void el.offsetHeight;
+            el.style.display = 'block';
+        }
     }, [onChange]);
+
+    // iOS 兼容：聚焦时强制滚动触发重绘
+    const handleFocus = useCallback(() => {
+        window.scrollTo(0, window.scrollY + 1);
+        setTimeout(() => window.scrollTo(0, window.scrollY - 1), 10);
+    }, []);
 
     // 插入文本到光标位置
     const insertAtCursor = useCallback((content: string, isHtml: boolean) => {
@@ -122,7 +155,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // 触发更新
         const newHtml = el.innerHTML;
         htmlRef.current = newHtml;
         onChange(htmlToPlainText(newHtml));
@@ -154,11 +186,16 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
-    const textColor = isDark ? 'text-zinc-200' : 'text-gray-900';
 
     return (
         <div
-            className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-visible flex flex-col content-editable-wrapper ${containerBg} ${borderColor}`}
+            className={`editable-wrapper relative w-full min-h-[70px] group/input border rounded-xl flex flex-col ${containerBg} ${borderColor}`}
+            style={{
+                overflow: 'visible',
+                transform: 'none',
+                WebkitTransform: 'none',
+                height: 'auto',
+            }}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
@@ -168,9 +205,10 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 innerRef={contentEditableRef}
                 html={htmlRef.current}
                 onChange={handleChange}
+                onFocus={handleFocus}
                 onPaste={handlePaste}
                 onKeyDown={handleKeyDown}
-                className={`w-full flex-1 outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`editable-input w-full flex-1 outline-none overflow-y-auto max-h-[100px] relative z-10 ${isDark ? 'node-scroll-dark editable-input-dark' : 'node-scroll editable-input-light'}`}
                 style={{ 
                     whiteSpace: 'pre-wrap', 
                     minHeight: '70px', 
@@ -182,8 +220,19 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     padding: '12px',
                     WebkitTextSizeAdjust: '100%',
                     caretColor: 'auto',
+                    opacity: 1,
+                    visibility: 'visible',
+                    pointerEvents: 'auto',
+                    display: 'block',
+                    position: 'relative',
+                    zIndex: 1,
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
                 }}
+                disabled={false}
                 spellCheck={false}
+                role="textbox"
+                aria-multiline={true}
             />
             {!value && (
                 <div 

@@ -4,23 +4,74 @@
    =========================================== */
 
 /* ============================================
+   react-contenteditable 核心兼容样式（iOS 打包后必加）
+   ============================================ */
+
+/* 通用 editable-input 样式 - 解决「输入了但看不见」的核心问题 */
+.editable-input {
+    /* 强制文字渲染 */
+    -webkit-text-fill-color: currentColor !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    
+    /* 确保可交互+渲染区域 */
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    pointer-events: auto !important;
+    min-height: 44px !important;
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+    
+    /* 保留换行 */
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    
+    /* 兜底：确保渲染层级 */
+    position: relative !important;
+    z-index: 1 !important;
+    display: block !important;
+    width: 100% !important;
+    padding: 12px !important;
+    outline: none !important;
+    
+    /* 防止 iOS 自动调整 */
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+    caret-color: auto !important;
+}
+
+/* 深色模式 */
+.editable-input-dark {
+    color: #e4e4e7 !important;
+    -webkit-text-fill-color: #e4e4e7 !important;
+}
+
+/* 浅色模式 */
+.editable-input-light {
+    color: #18181b !important;
+    -webkit-text-fill-color: #18181b !important;
+}
+
+/* 父容器样式：禁止任何可能阻断渲染的属性 */
+.editable-wrapper {
+    overflow: visible !important;
+    height: auto !important;
+    transform: none !important;
+    -webkit-transform: none !important;
+}
+
+/* ============================================
    ContentEditable 核心样式 - 防止打包压缩影响
    ============================================ */
 
-/* 通用 contentEditable 样式 - 使用 !important 防止被打包工具优化 */
 [contenteditable="true"] {
-    /* 关键：iOS 输入框字体小于 16px 会自动缩放，导致光标错位 */
     font-size: 16px !important;
-    /* 明确行高，避免光标错位 */
     line-height: 1.75 !important;
-    /* 明确内边距，避免光标贴近边框 */
     padding: 12px !important;
-    /* 确保光标正常显示 */
     caret-color: auto !important;
-    /* 防止 iOS 自动调整文本大小 */
     -webkit-text-size-adjust: 100% !important;
     text-size-adjust: 100% !important;
-    /* 允许正常的文本选择 */
     -webkit-user-select: text !important;
     user-select: text !important;
 }
@@ -30,19 +81,14 @@
    ============================================ */
 
 @supports (-webkit-touch-callout: none) {
-    /* 仅在 iOS 设备上应用 */
-    
-    [contenteditable="true"] {
-        /* 禁用 iOS 默认的聚焦高亮边框 */
+    [contenteditable="true"],
+    .editable-input {
         -webkit-tap-highlight-color: transparent;
-        /* 防止 iOS 的文本选择问题 */
         -webkit-user-select: text;
         user-select: text;
-        /* 触摸操作优化 */
         touch-action: manipulation;
     }
     
-    /* 修复 iOS 上 textarea 和 input 的缩放问题 */
     textarea,
     input[type="text"],
     input[type="search"],
@@ -53,7 +99,6 @@
         text-size-adjust: 100%;
     }
     
-    /* 修复 iOS Safari 上的触摸延迟 */
     button,
     [role="button"],
     [data-interactive="true"] {
@@ -61,15 +106,14 @@
         -webkit-tap-highlight-color: transparent;
     }
     
-    /* 防止 iOS 上的橡皮筋滚动影响 contentEditable */
     .node-scroll,
     .node-scroll-dark {
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
     }
     
-    /* 确保 chip 在 iOS 上不可编辑且不影响光标 */
-    [contenteditable="true"] .chip {
+    [contenteditable="true"] .chip,
+    .editable-input .chip {
         -webkit-user-select: none;
         user-select: none;
         pointer-events: none;
@@ -82,24 +126,15 @@
    ============================================ */
 
 @media (hover: none) and (pointer: coarse) {
-    [contenteditable="true"]::selection {
+    [contenteditable="true"]::selection,
+    .editable-input::selection {
         background-color: rgba(0, 150, 255, 0.3);
     }
     
-    [contenteditable="true"]::-webkit-selection {
+    [contenteditable="true"]::-webkit-selection,
+    .editable-input::-webkit-selection {
         background-color: rgba(0, 150, 255, 0.3);
     }
-}
-
-/* ============================================
-   ContentEditable 容器样式 - 解决软键盘偏移
-   ============================================ */
-
-/* 父容器样式，解决 iOS 软键盘弹出后 contenteditable 偏移 */
-.content-editable-wrapper {
-    position: relative !important;
-    overflow: visible !important;
-    height: auto !important;
 }
 
 /* ============================================
@@ -107,7 +142,6 @@
    ============================================ */
 
 @media (hover: none) {
-    /* 但允许画布区域的捏合缩放 */
     .canvas-container {
         touch-action: none;
     }
@@ -122,9 +156,7 @@
     align-items: center !important;
     justify-content: center !important;
     vertical-align: middle !important;
-    /* 防止 iOS 上的布局偏移 */
     transform: translateY(-1px) !important;
-    /* 确保不可编辑 */
     -webkit-user-modify: read-only !important;
 }
 
@@ -132,8 +164,8 @@
    零宽字符处理 - 用于光标定位
    ============================================ */
 
-/* 零宽空格用于在 chip 后保持光标位置 */
-[contenteditable="true"] {
+[contenteditable="true"],
+.editable-input {
     word-break: break-word;
     overflow-wrap: break-word;
 }
