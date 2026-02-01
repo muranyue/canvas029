@@ -1,0 +1,139 @@
+/* ===========================================
+   iOS Mobile Compatibility Fixes
+   仅针对 iOS 移动端的兼容性修复
+   =========================================== */
+
+/* ============================================
+   ContentEditable 核心样式 - 防止打包压缩影响
+   ============================================ */
+
+/* 通用 contentEditable 样式 - 使用 !important 防止被打包工具优化 */
+[contenteditable="true"] {
+    /* 关键：iOS 输入框字体小于 16px 会自动缩放，导致光标错位 */
+    font-size: 16px !important;
+    /* 明确行高，避免光标错位 */
+    line-height: 1.75 !important;
+    /* 明确内边距，避免光标贴近边框 */
+    padding: 12px !important;
+    /* 确保光标正常显示 */
+    caret-color: auto !important;
+    /* 防止 iOS 自动调整文本大小 */
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+    /* 允许正常的文本选择 */
+    -webkit-user-select: text !important;
+    user-select: text !important;
+}
+
+/* ============================================
+   iOS 专用修复 - 使用 @supports 检测
+   ============================================ */
+
+@supports (-webkit-touch-callout: none) {
+    /* 仅在 iOS 设备上应用 */
+    
+    [contenteditable="true"] {
+        /* 禁用 iOS 默认的聚焦高亮边框 */
+        -webkit-tap-highlight-color: transparent;
+        /* 防止 iOS 的文本选择问题 */
+        -webkit-user-select: text;
+        user-select: text;
+        /* 触摸操作优化 */
+        touch-action: manipulation;
+    }
+    
+    /* 修复 iOS 上 textarea 和 input 的缩放问题 */
+    textarea,
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="url"] {
+        font-size: 16px !important;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+    
+    /* 修复 iOS Safari 上的触摸延迟 */
+    button,
+    [role="button"],
+    [data-interactive="true"] {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* 防止 iOS 上的橡皮筋滚动影响 contentEditable */
+    .node-scroll,
+    .node-scroll-dark {
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+    }
+    
+    /* 确保 chip 在 iOS 上不可编辑且不影响光标 */
+    [contenteditable="true"] .chip {
+        -webkit-user-select: none;
+        user-select: none;
+        pointer-events: none;
+        display: inline-flex !important;
+    }
+}
+
+/* ============================================
+   iOS Selection 修复 - 防止选区跳动
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+    [contenteditable="true"]::selection {
+        background-color: rgba(0, 150, 255, 0.3);
+    }
+    
+    [contenteditable="true"]::-webkit-selection {
+        background-color: rgba(0, 150, 255, 0.3);
+    }
+}
+
+/* ============================================
+   ContentEditable 容器样式 - 解决软键盘偏移
+   ============================================ */
+
+/* 父容器样式，解决 iOS 软键盘弹出后 contenteditable 偏移 */
+.content-editable-wrapper {
+    position: relative !important;
+    overflow: visible !important;
+    height: auto !important;
+}
+
+/* ============================================
+   防止 iOS 上的双击缩放
+   ============================================ */
+
+@media (hover: none) {
+    /* 但允许画布区域的捏合缩放 */
+    .canvas-container {
+        touch-action: none;
+    }
+}
+
+/* ============================================
+   Chip 样式修复 - 确保在 iOS 上正确渲染
+   ============================================ */
+
+.chip {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    vertical-align: middle !important;
+    /* 防止 iOS 上的布局偏移 */
+    transform: translateY(-1px) !important;
+    /* 确保不可编辑 */
+    -webkit-user-modify: read-only !important;
+}
+
+/* ============================================
+   零宽字符处理 - 用于光标定位
+   ============================================ */
+
+/* 零宽空格用于在 chip 后保持光标位置 */
+[contenteditable="true"] {
+    word-break: break-word;
+    overflow-wrap: break-word;
+}

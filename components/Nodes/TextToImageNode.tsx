@@ -10,7 +10,7 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 使用纯 Selection/Range API 的 ContentEditablePromptInput - 不依赖 execCommand
+// 使用纯 Selection/Range API 的 ContentEditablePromptInput - iOS 兼容性优化版本
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
@@ -20,11 +20,13 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const divRef = useRef<HTMLDivElement>(null);
     const isComposingRef = useRef(false);
     const isInternalChangeRef = useRef(false);
+    const lastCursorPositionRef = useRef<number>(0);
 
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
+    // 优化的 getPlainText - 使用 textContent 优先，避免 iOS 上的 innerHTML 问题
     const getPlainText = (node: Node): string => {
         let text = '';
         node.childNodes.forEach(child => {
@@ -37,13 +39,76 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 } else if (el.tagName === 'BR') {
                     text += '\n';
                 } else if (el.tagName === 'DIV') {
-                    text += '\n' + getPlainText(el);
+                    const divText = getPlainText(el);
+                    text += (text && !text.endsWith('\n') ? '\n' : '') + divText;
                 } else {
                     text += getPlainText(el);
                 }
             }
         });
         return text;
+    };
+
+    // 保存光标位置（iOS 兼容）
+    const saveCursorPosition = (): number => {
+        const div = divRef.current;
+        if (!div) return 0;
+        
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return 0;
+        
+        const range = sel.getRangeAt(0);
+        const preCaretRange = range.cloneRange();
+        preCaretRange.selectNodeContents(div);
+        preCaretRange.setEnd(range.endContainer, range.endOffset);
+        
+        return preCaretRange.toString().length;
+    };
+
+    // 恢复光标位置（iOS 兼容）
+    const restoreCursorPosition = (element: HTMLElement, position?: number) => {
+        const sel = window.getSelection();
+        if (!sel) return;
+        
+        const range = document.createRange();
+        
+        if (position === undefined) {
+            range.selectNodeContents(element);
+            range.collapse(false);
+        } else {
+            let currentPos = 0;
+            let found = false;
+            
+            const walkNodes = (node: Node): boolean => {
+                if (found) return true;
+                
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const textLength = node.textContent?.length || 0;
+                    if (currentPos + textLength >= position) {
+                        range.setStart(node, position - currentPos);
+                        range.collapse(true);
+                        found = true;
+                        return true;
+                    }
+                    currentPos += textLength;
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    for (const child of Array.from(node.childNodes)) {
+                        if (walkNodes(child)) return true;
+                    }
+                }
+                return false;
+            };
+            
+            walkNodes(element);
+            
+            if (!found) {
+                range.selectNodeContents(element);
+                range.collapse(false);
+            }
+        }
+        
+        sel.removeAllRanges();
+        sel.addRange(range);
     };
 
     // 纯 Selection/Range API 插入文本
@@ -54,11 +119,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         const sel = window.getSelection();
         if (!sel) return;
         
-        // 确保有选区
         let range: Range;
         if (sel.rangeCount > 0) {
             range = sel.getRangeAt(0);
-            // 确保选区在当前 div 内
             if (!div.contains(range.commonAncestorContainer)) {
                 range = document.createRange();
                 range.selectNodeContents(div);
@@ -96,7 +159,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // 标记为内部变更，防止 useEffect 重置
         isInternalChangeRef.current = true;
         const newText = getPlainText(div);
         onChange(newText);
@@ -106,7 +168,6 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
-                // 使用 setTimeout 确保 focus 生效
                 setTimeout(() => {
                     if (text.startsWith('@')) {
                         insertAtCursor(createChipHtml(text), true);
@@ -132,14 +193,12 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     useEffect(() => {
-        // 如果是内部变更或正在组合输入，跳过
         if (isInternalChangeRef.current) {
             isInternalChangeRef.current = false;
             return;
         }
         if (isComposingRef.current) return;
         if (!divRef.current) return;
-        // 如果正在聚焦，不要重置内容
         if (document.activeElement === divRef.current) return;
         
         const currentText = getPlainText(divRef.current);
@@ -148,13 +207,25 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         }
     }, [value]);
 
-    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        // 组合输入中不更新
+    // iOS 优化的 handleInput
+    const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
         if (isComposingRef.current) return;
-        isInternalChangeRef.current = true;
-        const newText = getPlainText(e.currentTarget);
-        onChange(newText);
-    };
+        if (isInternalChangeRef.current) return;
+        
+        const target = e.currentTarget;
+        const cursorPos = saveCursorPosition();
+        lastCursorPositionRef.current = cursorPos;
+        
+        const newText = getPlainText(target);
+        
+        if (newText !== value) {
+            isInternalChangeRef.current = true;
+            onChange(newText);
+            setTimeout(() => {
+                isInternalChangeRef.current = false;
+            }, 0);
+        }
+    }, [onChange, value]);
 
     const handleCompositionStart = () => {
         isComposingRef.current = true;
@@ -165,6 +236,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         isInternalChangeRef.current = true;
         const newText = getPlainText(e.currentTarget);
         onChange(newText);
+        setTimeout(() => {
+            isInternalChangeRef.current = false;
+        }, 0);
     };
 
     const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -177,13 +251,30 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         e.stopPropagation();
     };
 
+    // iOS 修复：处理 blur 事件
+    const handleBlur = useCallback(() => {
+        if (divRef.current) {
+            const text = getPlainText(divRef.current);
+            if (text.trim() === '') {
+                divRef.current.innerHTML = '';
+            }
+        }
+    }, []);
+
+    // iOS 修复：处理 focus 事件
+    const handleFocus = useCallback(() => {
+        if (divRef.current && !value) {
+            restoreCursorPosition(divRef.current);
+        }
+    }, [value]);
+
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
     const textColor = isDark ? 'text-zinc-200' : 'text-gray-900';
 
     return (
         <div
-            className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
+            className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-visible flex flex-col content-editable-wrapper ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => {
@@ -196,13 +287,15 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         >
             <div
                 ref={divRef}
-                className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
+                className={`w-full flex-1 outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 contentEditable
                 onInput={handleInput}
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onBlur={handleBlur}
+                onFocus={handleFocus}
                 onTouchEnd={(e) => {
                     e.stopPropagation();
                     if (divRef.current && document.activeElement !== divRef.current) {
@@ -211,10 +304,25 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 }}
                 suppressContentEditableWarning
                 spellCheck={false}
-                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
+                // iOS 关键样式 - 使用内联样式确保不被打包工具优化
+                style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    minHeight: '70px', 
+                    cursor: 'text', 
+                    WebkitUserSelect: 'text', 
+                    userSelect: 'text',
+                    fontSize: '16px',
+                    lineHeight: '1.75',
+                    padding: '12px',
+                    WebkitTextSizeAdjust: '100%',
+                    caretColor: 'auto',
+                }}
             />
             {!value && (
-                <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
+                <div 
+                    className={`absolute pointer-events-none ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}
+                    style={{ top: '12px', left: '12px', fontSize: '16px', lineHeight: '1.75' }}
+                >
                     {placeholder}
                 </div>
             )}
