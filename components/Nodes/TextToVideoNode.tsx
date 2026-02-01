@@ -125,22 +125,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         htmlRef.current = newHtml;
         const plainText = htmlToPlainText(newHtml);
         onChange(plainText);
-        
-        // iOS 兼容：强制触发 DOM 重绘（解决打包后渲染不显示问题）
-        const el = contentEditableRef.current;
-        if (el) {
-            el.style.display = 'none';
-            void el.offsetHeight; // 触发重排
-            el.style.display = 'block';
-        }
     }, [onChange]);
-
-    // iOS 兼容：聚焦时强制滚动触发重绘
-    const handleFocus = useCallback(() => {
-        // 强制滚动页面（微小偏移），触发 iOS 重绘
-        window.scrollTo(0, window.scrollY + 1);
-        setTimeout(() => window.scrollTo(0, window.scrollY - 1), 10);
-    }, []);
 
     // 插入文本到光标位置
     const insertAtCursor = useCallback((content: string, isHtml: boolean) => {
@@ -208,6 +193,33 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         e.stopPropagation();
     }, []);
 
+    // iOS 专用：触摸时强制获取焦点并弹出键盘
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        const el = contentEditableRef.current;
+        if (!el) return;
+        
+        // 先 blur 其他所有 contenteditable 元素
+        const allEditables = document.querySelectorAll('[contenteditable="true"]');
+        allEditables.forEach(editable => {
+            if (editable !== el) {
+                (editable as HTMLElement).blur();
+            }
+        });
+        
+        // 强制聚焦当前元素
+        el.focus();
+        
+        // 设置光标到末尾
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (sel && el.childNodes.length > 0) {
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }, []);
+
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
 
@@ -223,19 +235,17 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             }}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
             data-interactive="true"
         >
             <ContentEditable
                 innerRef={contentEditableRef}
                 html={htmlRef.current}
                 onChange={handleChange}
-                onFocus={handleFocus}
                 onPaste={handlePaste}
                 onKeyDown={handleKeyDown}
+                onTouchEnd={handleTouchEnd}
                 className={`editable-input w-full flex-1 outline-none overflow-y-auto max-h-[120px] relative z-10 ${isDark ? 'node-scroll-dark editable-input-dark' : 'node-scroll editable-input-light'}`}
                 style={{ 
-                    // iOS 核心兼容样式
                     whiteSpace: 'pre-wrap', 
                     minHeight: '80px', 
                     cursor: 'text', 
@@ -246,20 +256,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     padding: '12px',
                     WebkitTextSizeAdjust: '100%',
                     caretColor: 'auto',
-                    // iOS 兼容：强制文字渲染
-                    opacity: 1,
-                    visibility: 'visible',
-                    pointerEvents: 'auto',
-                    display: 'block',
-                    position: 'relative',
-                    zIndex: 1,
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
                 }}
                 disabled={false}
                 spellCheck={false}
-                role="textbox"
-                aria-multiline={true}
             />
             {!value && (
                 <div 
@@ -473,7 +472,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] max-w-[calc(100vw-20px)] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
               <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-2 border`}>
                   
