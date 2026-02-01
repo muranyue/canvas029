@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import ContentEditable, { ContentEditableEvent } from 'react-contenteditable';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
@@ -10,129 +11,91 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 使用纯 Selection/Range API 的 ContentEditablePromptInput - iOS 兼容性优化版本
+// 使用 react-contenteditable 的 ContentEditablePromptInput - iOS 兼容性已由库处理
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
     placeholder?: string;
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
-    const divRef = useRef<HTMLDivElement>(null);
-    const isComposingRef = useRef(false);
-    const isInternalChangeRef = useRef(false);
-    const lastCursorPositionRef = useRef<number>(0);
+    const contentEditableRef = useRef<HTMLElement>(null);
+    const htmlRef = useRef<string>('');
 
+    // 创建 chip HTML
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
-    // 优化的 getPlainText - 使用 textContent 优先，避免 iOS 上的 innerHTML 问题
-    const getPlainText = (node: Node): string => {
-        let text = '';
-        node.childNodes.forEach(child => {
-            if (child.nodeType === Node.TEXT_NODE) {
-                text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
-            } else if (child.nodeType === Node.ELEMENT_NODE) {
-                const el = child as HTMLElement;
-                if (el.classList.contains('chip')) {
-                    text += el.dataset.value || '';
-                } else if (el.tagName === 'BR') {
-                    text += '\n';
-                } else if (el.tagName === 'DIV') {
-                    const divText = getPlainText(el);
-                    text += (text && !text.endsWith('\n') ? '\n' : '') + divText;
-                } else {
-                    text += getPlainText(el);
+    // 从 HTML 提取纯文本
+    const htmlToPlainText = (html: string): string => {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        
+        const extractText = (node: Node): string => {
+            let text = '';
+            node.childNodes.forEach(child => {
+                if (child.nodeType === Node.TEXT_NODE) {
+                    text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
+                } else if (child.nodeType === Node.ELEMENT_NODE) {
+                    const el = child as HTMLElement;
+                    if (el.classList.contains('chip')) {
+                        text += el.dataset.value || el.textContent || '';
+                    } else if (el.tagName === 'BR') {
+                        text += '\n';
+                    } else if (el.tagName === 'DIV') {
+                        const divText = extractText(el);
+                        text += (text && !text.endsWith('\n') ? '\n' : '') + divText;
+                    } else {
+                        text += extractText(el);
+                    }
                 }
-            }
-        });
-        return text;
+            });
+            return text;
+        };
+        
+        return extractText(temp);
     };
 
-    // 保存光标位置（iOS 兼容）
-    const saveCursorPosition = (): number => {
-        const div = divRef.current;
-        if (!div) return 0;
+    // 将纯文本转换为 HTML（包含 chip）
+    const plainTextToHtml = (text: string): string => {
+        if (!text) return '';
+        const regex = /(@(?:image|video)\s+\d+)/gi;
+        const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         
+        return text.split(regex).map(part => {
+            if (part.match(regex)) {
+                return createChipHtml(part);
+            }
+            return escapeHtml(part);
+        }).join('').replace(/\n/g, '<br>');
+    };
+
+    // 初始化和同步 HTML
+    useEffect(() => {
+        const newHtml = plainTextToHtml(value);
+        if (htmlRef.current !== newHtml) {
+            htmlRef.current = newHtml;
+        }
+    }, [value]);
+
+    // 处理内容变化
+    const handleChange = useCallback((evt: ContentEditableEvent) => {
+        const newHtml = evt.target.value;
+        htmlRef.current = newHtml;
+        const plainText = htmlToPlainText(newHtml);
+        onChange(plainText);
+    }, [onChange]);
+
+    // 插入文本到光标位置
+    const insertAtCursor = useCallback((content: string, isHtml: boolean) => {
+        const el = contentEditableRef.current;
+        if (!el) return;
+        
+        el.focus();
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return 0;
+        if (!sel || sel.rangeCount === 0) return;
         
         const range = sel.getRangeAt(0);
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(div);
-        preCaretRange.setEnd(range.endContainer, range.endOffset);
-        
-        return preCaretRange.toString().length;
-    };
-
-    // 恢复光标位置（iOS 兼容）
-    const restoreCursorPosition = (element: HTMLElement, position?: number) => {
-        const sel = window.getSelection();
-        if (!sel) return;
-        
-        const range = document.createRange();
-        
-        if (position === undefined) {
-            range.selectNodeContents(element);
-            range.collapse(false);
-        } else {
-            let currentPos = 0;
-            let found = false;
-            
-            const walkNodes = (node: Node): boolean => {
-                if (found) return true;
-                
-                if (node.nodeType === Node.TEXT_NODE) {
-                    const textLength = node.textContent?.length || 0;
-                    if (currentPos + textLength >= position) {
-                        range.setStart(node, position - currentPos);
-                        range.collapse(true);
-                        found = true;
-                        return true;
-                    }
-                    currentPos += textLength;
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    for (const child of Array.from(node.childNodes)) {
-                        if (walkNodes(child)) return true;
-                    }
-                }
-                return false;
-            };
-            
-            walkNodes(element);
-            
-            if (!found) {
-                range.selectNodeContents(element);
-                range.collapse(false);
-            }
-        }
-        
-        sel.removeAllRanges();
-        sel.addRange(range);
-    };
-
-    // 纯 Selection/Range API 插入文本
-    const insertAtCursor = (content: string, isHtml: boolean) => {
-        const div = divRef.current;
-        if (!div) return;
-        
-        const sel = window.getSelection();
-        if (!sel) return;
-        
-        let range: Range;
-        if (sel.rangeCount > 0) {
-            range = sel.getRangeAt(0);
-            if (!div.contains(range.commonAncestorContainer)) {
-                range = document.createRange();
-                range.selectNodeContents(div);
-                range.collapse(false);
-            }
-        } else {
-            range = document.createRange();
-            range.selectNodeContents(div);
-            range.collapse(false);
-        }
-        
         range.deleteContents();
         
         if (isHtml) {
@@ -159,114 +122,35 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        isInternalChangeRef.current = true;
-        const newText = getPlainText(div);
-        onChange(newText);
-    };
+        // 触发更新
+        const newHtml = el.innerHTML;
+        htmlRef.current = newHtml;
+        onChange(htmlToPlainText(newHtml));
+    }, [onChange]);
 
+    // 暴露 insertText 方法
     React.useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
-            if (divRef.current) {
-                divRef.current.focus();
-                setTimeout(() => {
-                    if (text.startsWith('@')) {
-                        insertAtCursor(createChipHtml(text), true);
-                    } else {
-                        insertAtCursor(text, false);
-                    }
-                }, 0);
-            }
-        }
-    }));
-
-    const parseTextToHtml = (text: string) => {
-        if (!text) return '';
-        const regex = /(@(?:image|video)\s+\d+)/gi;
-        const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-        return text.split(regex).map(part => {
-            if (part.match(regex)) {
-                return createChipHtml(part);
-            }
-            return escapeHtml(part);
-        }).join('').replace(/\n/g, '<br>');
-    };
-
-    useEffect(() => {
-        if (isInternalChangeRef.current) {
-            isInternalChangeRef.current = false;
-            return;
-        }
-        if (isComposingRef.current) return;
-        if (!divRef.current) return;
-        if (document.activeElement === divRef.current) return;
-        
-        const currentText = getPlainText(divRef.current);
-        if (value !== currentText) {
-            divRef.current.innerHTML = parseTextToHtml(value);
-        }
-    }, [value]);
-
-    // iOS 优化的 handleInput
-    const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-        if (isComposingRef.current) return;
-        if (isInternalChangeRef.current) return;
-        
-        const target = e.currentTarget;
-        const cursorPos = saveCursorPosition();
-        lastCursorPositionRef.current = cursorPos;
-        
-        const newText = getPlainText(target);
-        
-        if (newText !== value) {
-            isInternalChangeRef.current = true;
-            onChange(newText);
             setTimeout(() => {
-                isInternalChangeRef.current = false;
+                if (text.startsWith('@')) {
+                    insertAtCursor(createChipHtml(text), true);
+                } else {
+                    insertAtCursor(text, false);
+                }
             }, 0);
         }
-    }, [onChange, value]);
+    }), [insertAtCursor]);
 
-    const handleCompositionStart = () => {
-        isComposingRef.current = true;
-    };
-
-    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
-        isComposingRef.current = false;
-        isInternalChangeRef.current = true;
-        const newText = getPlainText(e.currentTarget);
-        onChange(newText);
-        setTimeout(() => {
-            isInternalChangeRef.current = false;
-        }, 0);
-    };
-
-    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    // 处理粘贴 - 只粘贴纯文本
+    const handlePaste = useCallback((e: React.ClipboardEvent) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
         insertAtCursor(text, false);
-    };
+    }, [insertAtCursor]);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         e.stopPropagation();
-    };
-
-    // iOS 修复：处理 blur 事件
-    const handleBlur = useCallback(() => {
-        if (divRef.current) {
-            const text = getPlainText(divRef.current);
-            if (text.trim() === '') {
-                divRef.current.innerHTML = '';
-            }
-        }
     }, []);
-
-    // iOS 修复：处理 focus 事件
-    const handleFocus = useCallback(() => {
-        if (divRef.current && !value) {
-            restoreCursorPosition(divRef.current);
-        }
-    }, [value]);
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
@@ -277,34 +161,16 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-visible flex flex-col content-editable-wrapper ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => {
-                e.stopPropagation();
-                if (divRef.current && document.activeElement !== divRef.current) {
-                    divRef.current.focus();
-                }
-            }}
+            onTouchStart={(e) => e.stopPropagation()}
             data-interactive="true"
         >
-            <div
-                ref={divRef}
-                className={`w-full flex-1 outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
-                contentEditable
-                onInput={handleInput}
-                onCompositionStart={handleCompositionStart}
-                onCompositionEnd={handleCompositionEnd}
-                onKeyDown={handleKeyDown}
+            <ContentEditable
+                innerRef={contentEditableRef}
+                html={htmlRef.current}
+                onChange={handleChange}
                 onPaste={handlePaste}
-                onBlur={handleBlur}
-                onFocus={handleFocus}
-                onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    if (divRef.current && document.activeElement !== divRef.current) {
-                        divRef.current.focus();
-                    }
-                }}
-                suppressContentEditableWarning
-                spellCheck={false}
-                // iOS 关键样式 - 使用内联样式确保不被打包工具优化
+                onKeyDown={handleKeyDown}
+                className={`w-full flex-1 outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'}`}
                 style={{ 
                     whiteSpace: 'pre-wrap', 
                     minHeight: '70px', 
@@ -317,6 +183,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     WebkitTextSizeAdjust: '100%',
                     caretColor: 'auto',
                 }}
+                spellCheck={false}
             />
             {!value && (
                 <div 
