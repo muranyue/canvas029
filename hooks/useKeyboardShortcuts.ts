@@ -1,8 +1,7 @@
-import React, { useEffect, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { NodeData, Connection } from '../types';
 
-export interface KeyboardShortcutsProps {
-    // State
+interface UseKeyboardShortcutsProps {
     nodes: NodeData[];
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
     connections: Connection[];
@@ -13,10 +12,8 @@ export interface KeyboardShortcutsProps {
     setSelectedConnectionId: React.Dispatch<React.SetStateAction<string | null>>;
     deletedNodes: NodeData[];
     setDeletedNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
-    
-    // UI State
-    previewMedia: { url: string; type: 'image' | 'video' } | null;
-    setPreviewMedia: React.Dispatch<React.SetStateAction<{ url: string; type: 'image' | 'video' } | null>>;
+    previewMedia: any;
+    setPreviewMedia: React.Dispatch<React.SetStateAction<any>>;
     contextMenu: any;
     setContextMenu: React.Dispatch<React.SetStateAction<any>>;
     quickAddMenu: any;
@@ -27,17 +24,12 @@ export interface KeyboardShortcutsProps {
     setIsSettingsOpen: React.Dispatch<React.SetStateAction<boolean>>;
     showColorPicker: boolean;
     setShowColorPicker: React.Dispatch<React.SetStateAction<boolean>>;
-    
-    // Refs
-    spacePressed: React.MutableRefObject<boolean>;
-    
-    // Actions
     performCopy: () => void;
     handleAlign: (direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void;
     handleGroupSelection: () => void;
 }
 
-export function useKeyboardShortcuts({
+export const useKeyboardShortcuts = ({
     nodes,
     setNodes,
     connections,
@@ -60,21 +52,18 @@ export function useKeyboardShortcuts({
     setIsSettingsOpen,
     showColorPicker,
     setShowColorPicker,
-    spacePressed,
     performCopy,
     handleAlign,
     handleGroupSelection,
-}: KeyboardShortcutsProps): void {
-    
+}: UseKeyboardShortcutsProps) => {
+    const spacePressed = useRef(false);
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
-            const isInput = target.tagName === 'INPUT' || 
-                           target.tagName === 'TEXTAREA' || 
-                           target.isContentEditable;
-
+            const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+            
             if (!isInput) {
-                // Delete/Backspace - Delete selected nodes or connection
                 if (e.key === 'Delete' || e.key === 'Backspace') {
                     if (selectedNodeIds.size > 0) {
                         const nodesToDelete = nodes.filter(n => selectedNodeIds.has(n.id));
@@ -83,9 +72,7 @@ export function useKeyboardShortcuts({
                             setDeletedNodes(prev => [...prev, ...withContent]);
                         }
                         setNodes(prev => prev.filter(n => !selectedNodeIds.has(n.id)));
-                        setConnections(prev => prev.filter(c => 
-                            !selectedNodeIds.has(c.sourceId) && !selectedNodeIds.has(c.targetId)
-                        ));
+                        setConnections(prev => prev.filter(c => !selectedNodeIds.has(c.sourceId) && !selectedNodeIds.has(c.targetId)));
                         setSelectedNodeIds(new Set());
                     }
                     if (selectedConnectionId) {
@@ -93,29 +80,22 @@ export function useKeyboardShortcuts({
                         setSelectedConnectionId(null);
                     }
                 }
-
-                // Ctrl/Cmd + C - Copy
                 if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
                     e.preventDefault();
                     performCopy();
                 }
-
-                // Ctrl/Cmd + Arrow Keys - Align
                 if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
                     if (e.key === 'ArrowUp') { e.preventDefault(); handleAlign('UP'); }
                     if (e.key === 'ArrowDown') { e.preventDefault(); handleAlign('DOWN'); }
                     if (e.key === 'ArrowLeft') { e.preventDefault(); handleAlign('LEFT'); }
                     if (e.key === 'ArrowRight') { e.preventDefault(); handleAlign('RIGHT'); }
                 }
-
-                // Ctrl/Cmd + G - Group
                 if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
                     e.preventDefault();
                     handleGroupSelection();
                 }
             }
-
-            // Escape - Close modals/menus
+            
             if (e.key === 'Escape') {
                 if (previewMedia) setPreviewMedia(null);
                 if (contextMenu) setContextMenu(null);
@@ -124,47 +104,27 @@ export function useKeyboardShortcuts({
                 if (isSettingsOpen) setIsSettingsOpen(false);
                 setShowColorPicker(false);
             }
-
-            // Space - Track for pan mode
             if (e.code === 'Space') spacePressed.current = true;
         };
 
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (e.code === 'Space') spacePressed.current = false;
+        const handleKeyUp = (e: KeyboardEvent) => { 
+            if (e.code === 'Space') spacePressed.current = false; 
         };
 
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
     }, [
-        nodes,
-        connections,
-        selectedNodeIds,
-        selectedConnectionId,
-        previewMedia,
-        contextMenu,
-        quickAddMenu,
-        showNewWorkflowDialog,
-        isSettingsOpen,
-        showColorPicker,
-        setNodes,
-        setConnections,
-        setSelectedNodeIds,
-        setSelectedConnectionId,
-        setDeletedNodes,
-        setPreviewMedia,
-        setContextMenu,
-        setQuickAddMenu,
-        setShowNewWorkflowDialog,
-        setIsSettingsOpen,
-        setShowColorPicker,
-        spacePressed,
-        performCopy,
-        handleAlign,
-        handleGroupSelection,
+        selectedNodeIds, selectedConnectionId, previewMedia, contextMenu, 
+        nodes, connections, quickAddMenu, showNewWorkflowDialog, isSettingsOpen, 
+        handleAlign, performCopy, handleGroupSelection,
+        setNodes, setConnections, setSelectedNodeIds, setSelectedConnectionId,
+        setDeletedNodes, setPreviewMedia, setContextMenu, setQuickAddMenu,
+        setShowNewWorkflowDialog, setIsSettingsOpen, setShowColorPicker
     ]);
-}
+
+    return { spacePressed };
+};

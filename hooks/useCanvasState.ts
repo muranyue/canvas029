@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { NodeData, Connection, CanvasTransform, Point, DragMode } from '../types';
 
-// Helper to load state safely from localStorage
+// Helper to load state safely
 const loadState = <T,>(key: string, fallback: T): T => {
     try {
         const item = localStorage.getItem(key);
@@ -12,159 +12,95 @@ const loadState = <T,>(key: string, fallback: T): T => {
     }
 };
 
-// Helper to save state safely to localStorage
-const saveState = (key: string, value: any): boolean => {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch (e) {
-        console.warn(`Failed to save ${key} to storage`, e);
-        // If storage is full, try to clear old data
-        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-            try {
-                localStorage.removeItem('canvas_deleted_nodes');
-                localStorage.setItem(key, JSON.stringify(value));
-                return true;
-            } catch {
-                return false;
-            }
-        }
-        return false;
-    }
-};
-
-export interface CanvasStateReturn {
-    // Core State
-    nodes: NodeData[];
-    setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
-    connections: Connection[];
-    setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
-    transform: CanvasTransform;
-    setTransform: React.Dispatch<React.SetStateAction<CanvasTransform>>;
-    canvasBg: string;
-    setCanvasBg: React.Dispatch<React.SetStateAction<string>>;
-    deletedNodes: NodeData[];
-    setDeletedNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
-    
-    // Selection State
-    selectedNodeIds: Set<string>;
-    setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-    selectedConnectionId: string | null;
-    setSelectedConnectionId: React.Dispatch<React.SetStateAction<string | null>>;
-    
-    // Drag State
-    dragMode: DragMode | 'RESIZE_NODE' | 'SELECT';
-    setDragMode: React.Dispatch<React.SetStateAction<DragMode | 'RESIZE_NODE' | 'SELECT'>>;
-    dragModeRef: React.MutableRefObject<DragMode | 'RESIZE_NODE' | 'SELECT'>;
-    
-    // UI State
-    isDark: boolean;
-    viewportSize: { width: number; height: number };
-    setViewportSize: React.Dispatch<React.SetStateAction<{ width: number; height: number }>>;
-    
-    // Computed Values
-    visibleNodes: NodeData[];
-    visibleNodeIds: Set<string>;
-    visibleConnections: Connection[];
-    
-    // Refs
-    containerRef: React.RefObject<HTMLDivElement>;
-    dragStartRef: React.MutableRefObject<{ x: number; y: number; w?: number; h?: number; nodeId?: string; initialNodeX?: number; direction?: string }>;
-    initialTransformRef: React.MutableRefObject<CanvasTransform>;
-    initialNodePositionsRef: React.MutableRefObject<{ id: string; x: number; y: number }[]>;
-    draggingNodesRef: React.MutableRefObject<Set<string>>;
-    lastMousePosRef: React.MutableRefObject<Point>;
-    spacePressed: React.MutableRefObject<boolean>;
-    
-    // Utility Functions
-    screenToWorld: (x: number, y: number) => Point;
-    generateId: () => string;
-    updateNodeData: (id: string, updates: Partial<NodeData>) => void;
-}
-
-export function useCanvasState(): CanvasStateReturn {
-    // Core State - Initialize from localStorage
+export const useCanvasState = () => {
+    // Core state from localStorage
     const [nodes, setNodes] = useState<NodeData[]>(() => loadState('canvas_nodes', []));
     const [connections, setConnections] = useState<Connection[]>(() => loadState('canvas_connections', []));
     const [transform, setTransform] = useState<CanvasTransform>(() => loadState('canvas_transform', { x: 0, y: 0, k: 1 }));
     const [canvasBg, setCanvasBg] = useState<string>(() => loadState('canvas_bg', '#0B0C0E'));
     const [deletedNodes, setDeletedNodes] = useState<NodeData[]>(() => loadState('canvas_deleted_nodes', []));
-    
-    // Selection State
+
+    // Selection state
     const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
     const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
-    
-    // Drag State
+    const [selectionBox, setSelectionBox] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
+
+    // Drag state
     const [dragMode, setDragMode] = useState<DragMode | 'RESIZE_NODE' | 'SELECT'>('NONE');
     const dragModeRef = useRef(dragMode);
-    
-    // Viewport State
+
+    // Viewport state
     const [viewportSize, setViewportSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-    
-    // Refs
-    const containerRef = useRef<HTMLDivElement>(null);
-    const dragStartRef = useRef<{ x: number; y: number; w?: number; h?: number; nodeId?: string; initialNodeX?: number; direction?: string }>({ x: 0, y: 0 });
-    const initialTransformRef = useRef<CanvasTransform>({ x: 0, y: 0, k: 1 });
-    const initialNodePositionsRef = useRef<{ id: string; x: number; y: number }[]>([]);
-    const draggingNodesRef = useRef<Set<string>>(new Set());
-    const lastMousePosRef = useRef<Point>({ x: 0, y: 0 });
-    const spacePressed = useRef(false);
-    
-    // Derived State
+
+    // UI state
+    const [previewMedia, setPreviewMedia] = useState<{ url: string, type: 'image' | 'video' } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ 
+        type: 'CANVAS' | 'NODE', 
+        nodeId?: string, 
+        nodeType?: any, 
+        x: number, 
+        y: number, 
+        worldX: number, 
+        worldY: number 
+    } | null>(null);
+    const [quickAddMenu, setQuickAddMenu] = useState<{ sourceId: string, x: number, y: number, worldX: number, worldY: number } | null>(null);
+    const [showNewWorkflowDialog, setShowNewWorkflowDialog] = useState(false);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [showMinimap, setShowMinimap] = useState(true);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const [nextGroupColor, setNextGroupColor] = useState('#E0E2E8');
+
+    // Temp connection state
+    const [tempConnection, setTempConnection] = useState<Point | null>(null);
+    const [suggestedNodes, setSuggestedNodes] = useState<NodeData[]>([]);
+
     const isDark = canvasBg === '#0B0C0E';
-    
+
     // Sync dragModeRef
     useEffect(() => {
         dragModeRef.current = dragMode;
     }, [dragMode]);
-    
+
     // Persistence Effect with Dynamic Debounce
     useEffect(() => {
         const isGenerating = nodes.some(n => n.isLoading);
         const delay = isGenerating ? 2000 : 1000;
 
         const handler = setTimeout(() => {
-            saveState('canvas_nodes', nodes);
-            saveState('canvas_connections', connections);
-            saveState('canvas_transform', transform);
-            saveState('canvas_bg', canvasBg);
-            saveState('canvas_deleted_nodes', deletedNodes);
+            localStorage.setItem('canvas_nodes', JSON.stringify(nodes));
+            localStorage.setItem('canvas_connections', JSON.stringify(connections));
+            localStorage.setItem('canvas_transform', JSON.stringify(transform));
+            localStorage.setItem('canvas_bg', JSON.stringify(canvasBg));
+            localStorage.setItem('canvas_deleted_nodes', JSON.stringify(deletedNodes));
         }, delay);
 
         return () => clearTimeout(handler);
     }, [nodes, connections, transform, canvasBg, deletedNodes]);
-    
+
     // Viewport resize handler
     useEffect(() => {
-        const updateViewportSize = () => {
-            if (containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect();
-                setViewportSize({ width: rect.width, height: rect.height });
-            }
-        };
-        
-        const timer = setTimeout(updateViewportSize, 0);
-        window.addEventListener('resize', updateViewportSize);
-        return () => {
-            clearTimeout(timer);
-            window.removeEventListener('resize', updateViewportSize);
-        };
+        const handleResize = () => setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, []);
-    
-    // Utility Functions
-    const screenToWorld = useCallback((x: number, y: number): Point => ({
+
+    // Reset color picker on selection change
+    useEffect(() => {
+        setShowColorPicker(false);
+    }, [selectedNodeIds]);
+
+    // Screen to world coordinate conversion
+    const screenToWorld = useCallback((x: number, y: number) => ({
         x: (x - transform.x) / transform.k,
         y: (y - transform.y) / transform.k,
     }), [transform]);
-    
-    const generateId = useCallback(() => Math.random().toString(36).substr(2, 9), []);
-    
+
+    // Update node data
     const updateNodeData = useCallback((id: string, updates: Partial<NodeData>) => {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
     }, []);
 
-    
-    // Calculate visible nodes with buffer zone for smooth scrolling
+    // Calculate visible nodes with buffer zone
     const visibleNodes = useMemo(() => {
         if (viewportSize.width === 0 || viewportSize.height === 0) return nodes;
         
@@ -183,9 +119,9 @@ export function useCanvasState(): CanvasStateReturn {
                      node.y > viewportBottom);
         });
     }, [nodes, transform, viewportSize]);
-    
+
     const visibleNodeIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
-    
+
     // Calculate visible connections
     const visibleConnections = useMemo(() => {
         if (viewportSize.width === 0 || viewportSize.height === 0) return connections;
@@ -217,53 +153,49 @@ export function useCanvasState(): CanvasStateReturn {
                      lineTop > viewportBottom);
         });
     }, [connections, nodes, transform, viewportSize]);
-    
+
     return {
-        // Core State
-        nodes,
-        setNodes,
-        connections,
-        setConnections,
-        transform,
-        setTransform,
-        canvasBg,
-        setCanvasBg,
-        deletedNodes,
-        setDeletedNodes,
+        // Core state
+        nodes, setNodes,
+        connections, setConnections,
+        transform, setTransform,
+        canvasBg, setCanvasBg,
+        deletedNodes, setDeletedNodes,
         
-        // Selection State
-        selectedNodeIds,
-        setSelectedNodeIds,
-        selectedConnectionId,
-        setSelectedConnectionId,
+        // Selection
+        selectedNodeIds, setSelectedNodeIds,
+        selectedConnectionId, setSelectedConnectionId,
+        selectionBox, setSelectionBox,
         
-        // Drag State
-        dragMode,
-        setDragMode,
+        // Drag
+        dragMode, setDragMode,
         dragModeRef,
         
-        // UI State
-        isDark,
-        viewportSize,
-        setViewportSize,
-        
-        // Computed Values
+        // Viewport
+        viewportSize, setViewportSize,
         visibleNodes,
         visibleNodeIds,
         visibleConnections,
         
-        // Refs
-        containerRef,
-        dragStartRef,
-        initialTransformRef,
-        initialNodePositionsRef,
-        draggingNodesRef,
-        lastMousePosRef,
-        spacePressed,
+        // UI state
+        previewMedia, setPreviewMedia,
+        contextMenu, setContextMenu,
+        quickAddMenu, setQuickAddMenu,
+        showNewWorkflowDialog, setShowNewWorkflowDialog,
+        isSettingsOpen, setIsSettingsOpen,
+        showMinimap, setShowMinimap,
+        showColorPicker, setShowColorPicker,
+        nextGroupColor, setNextGroupColor,
         
-        // Utility Functions
+        // Temp connection
+        tempConnection, setTempConnection,
+        suggestedNodes, setSuggestedNodes,
+        
+        // Computed
+        isDark,
+        
+        // Utils
         screenToWorld,
-        generateId,
         updateNodeData,
     };
-}
+};

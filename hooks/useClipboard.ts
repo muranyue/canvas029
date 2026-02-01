@@ -1,51 +1,42 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { NodeData, Connection, NodeType, Point } from '../types';
 import { calculateImportDimensions } from './useNodeOperations';
 
-export interface ClipboardProps {
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+interface UseClipboardProps {
     nodes: NodeData[];
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
     connections: Connection[];
     setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
     selectedNodeIds: Set<string>;
     setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-    transform: { x: number; y: number; k: number };
+    screenToWorld: (x: number, y: number) => { x: number, y: number };
+    addNode: (type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => NodeData;
     lastMousePosRef: React.MutableRefObject<Point>;
-    screenToWorld: (x: number, y: number) => Point;
-    generateId: () => string;
-    addNode: (type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => void;
 }
 
-export interface ClipboardReturn {
-    internalClipboard: { nodes: NodeData[]; connections: Connection[] } | null;
-    performCopy: () => void;
-    performPaste: (targetPos: Point) => void;
-}
-
-export function useClipboard({
+export const useClipboard = ({
     nodes,
     setNodes,
     connections,
     setConnections,
     selectedNodeIds,
     setSelectedNodeIds,
-    transform,
-    lastMousePosRef,
     screenToWorld,
-    generateId,
     addNode,
-}: ClipboardProps): ClipboardReturn {
-    
-    const [internalClipboard, setInternalClipboard] = useState<{ nodes: NodeData[]; connections: Connection[] } | null>(null);
+    lastMousePosRef,
+}: UseClipboardProps) => {
+    const [internalClipboard, setInternalClipboard] = useState<{ nodes: NodeData[], connections: Connection[] } | null>(null);
 
     const performCopy = useCallback(() => {
         if (selectedNodeIds.size === 0) return;
-
+        
         const selectedNodes = nodes.filter(n => selectedNodeIds.has(n.id));
-        const selectedConnections = connections.filter(c =>
+        const selectedConnections = connections.filter(c => 
             selectedNodeIds.has(c.sourceId) && selectedNodeIds.has(c.targetId)
         );
-
+        
         setInternalClipboard({ nodes: selectedNodes, connections: selectedConnections });
     }, [nodes, connections, selectedNodeIds]);
 
@@ -53,7 +44,7 @@ export function useClipboard({
         if (!internalClipboard || internalClipboard.nodes.length === 0) return;
 
         const { nodes: clipboardNodes, connections: clipboardConnections } = internalClipboard;
-
+        
         let minX = Infinity, minY = Infinity;
         clipboardNodes.forEach(n => {
             if (n.x < minX) minX = n.x;
@@ -87,14 +78,29 @@ export function useClipboard({
         setNodes(prev => [...prev, ...newNodes]);
         setConnections(prev => [...prev, ...newConnections]);
         setSelectedNodeIds(new Set(newNodes.map(n => n.id)));
-    }, [internalClipboard, generateId, setNodes, setConnections, setSelectedNodeIds]);
+    }, [internalClipboard, setNodes, setConnections, setSelectedNodeIds]);
 
-    // Handle system paste events
+    const copyImageToClipboard = useCallback(async (nodeId: string) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (node && node.imageSrc) {
+            try {
+                const res = await fetch(node.imageSrc);
+                const blob = await res.blob();
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob as Blob })]);
+                alert("Image copied to clipboard");
+            } catch (e) { 
+                console.error(e); 
+                alert("Failed to copy image"); 
+            }
+        }
+    }, [nodes]);
+
+    // Handle system paste (images/videos from clipboard)
     const handlePaste = useCallback(async (e: ClipboardEvent) => {
         const activeElement = document.activeElement;
-        const isInputFocused = activeElement instanceof HTMLInputElement ||
-            activeElement instanceof HTMLTextAreaElement ||
-            (activeElement as HTMLElement)?.isContentEditable;
+        const isInputFocused = activeElement instanceof HTMLInputElement || 
+                              activeElement instanceof HTMLTextAreaElement || 
+                              (activeElement as HTMLElement)?.isContentEditable;
         if (isInputFocused) return;
 
         const items = e.clipboardData?.items;
@@ -142,8 +148,9 @@ export function useClipboard({
             }
         }
         if (!hasSystemMedia && internalClipboard) performPaste(worldPos);
-    }, [screenToWorld, lastMousePosRef, addNode, internalClipboard, performPaste]);
+    }, [screenToWorld, internalClipboard, performPaste, addNode, lastMousePosRef]);
 
+    // Register paste event listener
     useEffect(() => {
         document.addEventListener('paste', handlePaste);
         return () => document.removeEventListener('paste', handlePaste);
@@ -153,5 +160,6 @@ export function useClipboard({
         internalClipboard,
         performCopy,
         performPaste,
+        copyImageToClipboard,
     };
-}
+};

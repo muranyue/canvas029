@@ -1,5 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { NodeData, NodeType } from '../types';
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // Morandi-ish Colored Grays
 export const GROUP_COLORS = [
@@ -12,39 +14,25 @@ export const GROUP_COLORS = [
     '#E3E8E6',
 ];
 
-export interface GroupingProps {
+interface UseGroupingProps {
     nodes: NodeData[];
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
     selectedNodeIds: Set<string>;
     setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-    generateId: () => string;
-}
-
-export interface GroupingReturn {
     nextGroupColor: string;
     setNextGroupColor: React.Dispatch<React.SetStateAction<string>>;
-    showColorPicker: boolean;
     setShowColorPicker: React.Dispatch<React.SetStateAction<boolean>>;
-    handleGroupSelection: () => void;
-    handleUngroup: () => void;
-    handleGroupColorChange: (color: string) => void;
 }
 
-export function useGrouping({
+export const useGrouping = ({
     nodes,
     setNodes,
     selectedNodeIds,
     setSelectedNodeIds,
-    generateId,
-}: GroupingProps): GroupingReturn {
-    
-    const [nextGroupColor, setNextGroupColor] = useState('#E0E2E8');
-    const [showColorPicker, setShowColorPicker] = useState(false);
-
-    // Reset color picker visibility when selection changes
-    useEffect(() => {
-        setShowColorPicker(false);
-    }, [selectedNodeIds]);
+    nextGroupColor,
+    setNextGroupColor,
+    setShowColorPicker,
+}: UseGroupingProps) => {
 
     const handleGroupSelection = useCallback(() => {
         const selected = nodes.filter(n => selectedNodeIds.has(n.id));
@@ -68,17 +56,16 @@ export function useGrouping({
             width: (maxX - minX) + padding * 2,
             height: (maxY - minY) + padding * 2,
             title: 'Group',
-            color: nextGroupColor,
+            color: nextGroupColor, 
         };
 
         setNodes(prev => {
-            // IMPORTANT: When creating a group, we must order it BEHIND the selected nodes.
             const selectedIds = new Set(selected.map(n => n.id));
             const others = prev.filter(n => !selectedIds.has(n.id));
             return [...others, groupNode, ...selected];
         });
         setSelectedNodeIds(new Set([groupNode.id]));
-    }, [nodes, selectedNodeIds, nextGroupColor, generateId, setNodes, setSelectedNodeIds]);
+    }, [nodes, selectedNodeIds, nextGroupColor, setNodes, setSelectedNodeIds]);
 
     const handleUngroup = useCallback(() => {
         if (selectedNodeIds.size !== 1) return;
@@ -91,9 +78,8 @@ export function useGrouping({
     }, [nodes, selectedNodeIds, setNodes, setSelectedNodeIds]);
 
     const handleGroupColorChange = useCallback((color: string) => {
-        // Update ALL selected groups (or just one if single select)
         const selectedGroups = nodes.filter(n => selectedNodeIds.has(n.id) && n.type === NodeType.GROUP);
-
+        
         if (selectedGroups.length > 0) {
             setNodes(prev => prev.map(n => {
                 if (selectedNodeIds.has(n.id) && n.type === NodeType.GROUP) {
@@ -102,19 +88,31 @@ export function useGrouping({
                 return n;
             }));
         }
-
-        // Always update global nextGroupColor state
+        
         setNextGroupColor(color);
         setShowColorPicker(false);
-    }, [nodes, selectedNodeIds, setNodes]);
+    }, [nodes, selectedNodeIds, setNodes, setNextGroupColor, setShowColorPicker]);
+
+    // Calculate Selection Center for Group Toolbar
+    const getSelectionCenter = useCallback((transform: { x: number, y: number, k: number }) => {
+        const selected = nodes.filter(n => selectedNodeIds.has(n.id));
+        if (selected.length === 0) return null;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity;
+        selected.forEach(n => {
+            if (n.x < minX) minX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.x + n.width > maxX) maxX = n.x + n.width;
+        });
+        return {
+            x: ((minX + maxX) / 2) * transform.k + transform.x,
+            y: minY * transform.k + transform.y
+        };
+    }, [nodes, selectedNodeIds]);
 
     return {
-        nextGroupColor,
-        setNextGroupColor,
-        showColorPicker,
-        setShowColorPicker,
         handleGroupSelection,
         handleUngroup,
         handleGroupColorChange,
+        getSelectionCenter,
     };
-}
+};

@@ -1,56 +1,49 @@
-import { useState, useRef, useCallback } from 'react';
-import { NodeData, Connection, NodeType, Point, DragMode } from '../types';
+import { useCallback, useMemo } from 'react';
+import { NodeData, Connection } from '../types';
 
-export interface ConnectionManagerProps {
+const EMPTY_ARRAY: { src: string, isVideo: boolean }[] = [];
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+interface UseConnectionManagerProps {
     nodes: NodeData[];
     connections: Connection[];
     setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
-    selectedConnectionId: string | null;
-    setSelectedConnectionId: React.Dispatch<React.SetStateAction<string | null>>;
-    setDragMode: React.Dispatch<React.SetStateAction<DragMode | 'RESIZE_NODE' | 'SELECT'>>;
-    screenToWorld: (x: number, y: number) => Point;
-    generateId: () => string;
-}
-
-export interface ConnectionManagerReturn {
-    // Temp Connection State
-    tempConnection: Point | null;
-    setTempConnection: React.Dispatch<React.SetStateAction<Point | null>>;
-    
-    // Suggested Nodes
-    suggestedNodes: NodeData[];
+    setDragMode: React.Dispatch<React.SetStateAction<any>>;
+    setTempConnection: React.Dispatch<React.SetStateAction<any>>;
     setSuggestedNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
-    
-    // Connection Start Ref
-    connectionStartRef: React.MutableRefObject<{ nodeId: string; type: 'source' | 'target' } | null>;
-    
-    // Connection Operations
-    createConnection: (sourceId: string, targetId: string) => void;
-    removeConnection: (id: string) => void;
-    
-    // Event Handlers
-    handleConnectStart: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
-    handleConnectTouchStart: (e: React.TouchEvent, nodeId: string, type: 'source' | 'target') => void;
-    handlePortMouseUp: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
-    
-    // Update Suggested Nodes
-    updateSuggestedNodes: (worldPos: Point) => void;
+    setSelectedConnectionId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
-export function useConnectionManager({
+export const useConnectionManager = ({
     nodes,
     connections,
     setConnections,
-    selectedConnectionId,
-    setSelectedConnectionId,
     setDragMode,
-    screenToWorld,
-    generateId,
-}: ConnectionManagerProps): ConnectionManagerReturn {
-    
-    const [tempConnection, setTempConnection] = useState<Point | null>(null);
-    const [suggestedNodes, setSuggestedNodes] = useState<NodeData[]>([]);
-    const connectionStartRef = useRef<{ nodeId: string; type: 'source' | 'target' } | null>(null);
+    setTempConnection,
+    setSuggestedNodes,
+    setSelectedConnectionId,
+}: UseConnectionManagerProps) => {
+
+    // Memoize inputs map to prevent array recreation on every render
+    const inputsMap = useMemo(() => {
+        const map: Record<string, { src: string, isVideo: boolean }[]> = {};
+        nodes.forEach(node => {
+            map[node.id] = connections
+                .filter(c => c.targetId === node.id)
+                .map(c => nodes.find(n => n.id === c.sourceId))
+                .filter(n => n && (n.imageSrc || n.videoSrc))
+                .map(n => ({
+                    src: n!.videoSrc || n!.imageSrc || '',
+                    isVideo: !!n!.videoSrc
+                }));
+        });
+        return map;
+    }, [nodes, connections]);
+
+    const getInputImages = useCallback((nodeId: string) => {
+        return inputsMap[nodeId] || EMPTY_ARRAY;
+    }, [inputsMap]);
 
     const createConnection = useCallback((sourceId: string, targetId: string) => {
         if (!connections.some(c => c.sourceId === sourceId && c.targetId === targetId)) {
@@ -58,75 +51,18 @@ export function useConnectionManager({
         }
         setDragMode('NONE');
         setTempConnection(null);
-        connectionStartRef.current = null;
         setSuggestedNodes([]);
-    }, [connections, setConnections, generateId, setDragMode]);
+    }, [connections, setConnections, setDragMode, setTempConnection, setSuggestedNodes]);
 
     const removeConnection = useCallback((id: string) => {
         setConnections(prev => prev.filter(c => c.id !== id));
         setSelectedConnectionId(null);
     }, [setConnections, setSelectedConnectionId]);
 
-    const handleConnectStart = useCallback((e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => {
-        e.stopPropagation();
-        e.preventDefault();
-        connectionStartRef.current = { nodeId, type };
-        setDragMode('CONNECT');
-        setTempConnection(screenToWorld(e.clientX, e.clientY));
-    }, [setDragMode, screenToWorld]);
-
-    const handleConnectTouchStart = useCallback((e: React.TouchEvent, nodeId: string, type: 'source' | 'target') => {
-        e.stopPropagation();
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            connectionStartRef.current = { nodeId, type };
-            setDragMode('CONNECT');
-            setTempConnection(screenToWorld(touch.clientX, touch.clientY));
-        }
-    }, [setDragMode, screenToWorld]);
-
-    const handlePortMouseUp = useCallback((e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => {
-        e.stopPropagation();
-        e.preventDefault();
-        if (connectionStartRef.current && 
-            connectionStartRef.current.type === 'source' && 
-            type === 'target' && 
-            connectionStartRef.current.nodeId !== nodeId) {
-            createConnection(connectionStartRef.current.nodeId, nodeId);
-        }
-    }, [createConnection]);
-
-    const updateSuggestedNodes = useCallback((worldPos: Point) => {
-        if (connectionStartRef.current?.type === 'source') {
-            const candidates = nodes
-                .filter(n => n.id !== connectionStartRef.current?.nodeId)
-                .filter(n => n.type !== NodeType.ORIGINAL_IMAGE && n.type !== NodeType.GROUP)
-                .map(n => ({
-                    node: n,
-                    dist: Math.sqrt(
-                        Math.pow(worldPos.x - (n.x + n.width / 2), 2) +
-                        Math.pow(worldPos.y - (n.y + n.height / 2), 2)
-                    )
-                }))
-                .filter(item => item.dist < 500)
-                .sort((a, b) => a.dist - b.dist)
-                .slice(0, 3)
-                .map(item => item.node);
-            setSuggestedNodes(candidates);
-        }
-    }, [nodes]);
-
     return {
-        tempConnection,
-        setTempConnection,
-        suggestedNodes,
-        setSuggestedNodes,
-        connectionStartRef,
+        inputsMap,
+        getInputImages,
         createConnection,
         removeConnection,
-        handleConnectStart,
-        handleConnectTouchStart,
-        handlePortMouseUp,
-        updateSuggestedNodes,
     };
-}
+};

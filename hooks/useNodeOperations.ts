@@ -1,9 +1,11 @@
-import { useCallback, useMemo } from 'react';
-import { NodeData, Connection, NodeType, Point } from '../types';
+import { useCallback } from 'react';
+import { NodeData, Connection, NodeType } from '../types';
+import { generateCreativeDescription, generateImage, generateVideo } from '../services/geminiService';
 
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 240;
-const EMPTY_ARRAY: { src: string; isVideo: boolean }[] = [];
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
 
 // Helper for resizing imported media constraints
 export const calculateImportDimensions = (naturalWidth: number, naturalHeight: number) => {
@@ -26,73 +28,35 @@ export const calculateImportDimensions = (naturalWidth: number, naturalHeight: n
     return { width, height, ratio };
 };
 
-export interface NodeOperationsProps {
+interface UseNodeOperationsProps {
     nodes: NodeData[];
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
     connections: Connection[];
     setConnections: React.Dispatch<React.SetStateAction<Connection[]>>;
-    selectedNodeIds: Set<string>;
-    setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
     deletedNodes: NodeData[];
     setDeletedNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
-    transform: { x: number; y: number; k: number };
-    containerRef: React.RefObject<HTMLDivElement>;
-    screenToWorld: (x: number, y: number) => Point;
-    generateId: () => string;
+    selectedNodeIds: Set<string>;
+    setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
+    screenToWorld: (x: number, y: number) => { x: number, y: number };
+    getInputImages: (nodeId: string) => { src: string, isVideo: boolean }[];
+    containerRef: React.RefObject<HTMLDivElement>;
 }
 
-export interface NodeOperationsReturn {
-    // Input Images Map
-    inputsMap: Record<string, { src: string; isVideo: boolean }[]>;
-    getInputImages: (nodeId: string) => { src: string; isVideo: boolean }[];
-    
-    // Node CRUD
-    addNode: (type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => void;
-    deleteNode: (id: string) => void;
-    
-    // Alignment
-    handleAlign: (direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void;
-    
-    // Toolbar Actions
-    handleToolbarAction: (nodeId: string, actionId: string) => void;
-}
-
-export function useNodeOperations({
+export const useNodeOperations = ({
     nodes,
     setNodes,
     connections,
     setConnections,
-    selectedNodeIds,
-    setSelectedNodeIds,
     deletedNodes,
     setDeletedNodes,
-    transform,
-    containerRef,
-    screenToWorld,
-    generateId,
+    selectedNodeIds,
+    setSelectedNodeIds,
     updateNodeData,
-}: NodeOperationsProps): NodeOperationsReturn {
-    
-    // Memoize inputs map to prevent array recreation on every render
-    const inputsMap = useMemo(() => {
-        const map: Record<string, { src: string; isVideo: boolean }[]> = {};
-        nodes.forEach(node => {
-            map[node.id] = connections
-                .filter(c => c.targetId === node.id)
-                .map(c => nodes.find(n => n.id === c.sourceId))
-                .filter(n => n && (n.imageSrc || n.videoSrc))
-                .map(n => ({
-                    src: n!.videoSrc || n!.imageSrc || '',
-                    isVideo: !!n!.videoSrc
-                }));
-        });
-        return map;
-    }, [nodes, connections]);
-
-    const getInputImages = useCallback((nodeId: string) => {
-        return inputsMap[nodeId] || EMPTY_ARRAY;
-    }, [inputsMap]);
+    screenToWorld,
+    getInputImages,
+    containerRef,
+}: UseNodeOperationsProps) => {
 
     const addNode = useCallback((type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => {
         if (x === undefined || y === undefined) {
@@ -112,25 +76,25 @@ export function useNodeOperations({
         if (type === NodeType.ORIGINAL_IMAGE) {
             h = dataOverride?.height || 240;
         } else if (type === NodeType.TEXT_TO_VIDEO) {
-            if (!dataOverride?.width) w = 400 * (16/9);
+            if (!dataOverride?.width) w = 400 * (16/9); 
             if (!dataOverride?.height) h = 400;
         } else if (type === NodeType.TEXT_TO_IMAGE) {
             if (!dataOverride?.width) w = 400;
             if (!dataOverride?.height) h = 400;
         }
-
+        
         const newNode: NodeData = {
             id: generateId(),
             type,
             x,
             y,
             width: w,
-            height: h,
+            height: h, 
             title: dataOverride?.title || (type === NodeType.TEXT_TO_IMAGE ? 'Text to Image' :
                    type === NodeType.TEXT_TO_VIDEO ? 'Text to Video' :
                    type === NodeType.CREATIVE_DESC ? 'Creative Description' : `Original Image_${Date.now()}`),
             aspectRatio: dataOverride?.aspectRatio || (type === NodeType.TEXT_TO_VIDEO ? '16:9' : '1:1'),
-            model: dataOverride?.model || (type === NodeType.TEXT_TO_IMAGE ? 'BananaPro' :
+            model: dataOverride?.model || (type === NodeType.TEXT_TO_IMAGE ? 'BananaPro' : 
                    type === NodeType.TEXT_TO_VIDEO ? 'Sora2' : 'IMAGE'),
             resolution: dataOverride?.resolution || (type === NodeType.TEXT_TO_VIDEO ? '720p' : '1k'),
             duration: dataOverride?.duration || (type === NodeType.TEXT_TO_VIDEO ? '5s' : undefined),
@@ -140,10 +104,11 @@ export function useNodeOperations({
             videoSrc: dataOverride?.videoSrc,
             outputArtifacts: dataOverride?.outputArtifacts || (dataOverride?.imageSrc || dataOverride?.videoSrc ? [dataOverride.imageSrc || dataOverride.videoSrc!] : [])
         };
-
+        
         setNodes(prev => [...prev, newNode]);
         setSelectedNodeIds(new Set([newNode.id]));
-    }, [containerRef, screenToWorld, generateId, setNodes, setSelectedNodeIds]);
+        return newNode;
+    }, [containerRef, screenToWorld, setNodes, setSelectedNodeIds]);
 
     const deleteNode = useCallback((id: string) => {
         const node = nodes.find(n => n.id === id);
@@ -154,17 +119,105 @@ export function useNodeOperations({
         setConnections(prev => prev.filter(c => c.sourceId !== id && c.targetId !== id));
     }, [nodes, setNodes, setConnections, setDeletedNodes]);
 
+    const handleGenerate = useCallback(async (nodeId: string) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        updateNodeData(nodeId, { isLoading: true });
+        
+        const inputs = getInputImages(node.id);
+        const inputSrcs = inputs.map(i => i.src);
+
+        try {
+            if (node.type === NodeType.CREATIVE_DESC) {
+                const res = await generateCreativeDescription(node.prompt || '', node.model === 'TEXT_TO_VIDEO' ? 'VIDEO' : 'IMAGE');
+                updateNodeData(nodeId, { optimizedPrompt: res, isLoading: false });
+            } else {
+                let results: string[] = [];
+                if (node.type === NodeType.TEXT_TO_IMAGE) {
+                    results = await generateImage(
+                        node.prompt || '', node.aspectRatio, node.model, node.resolution, node.count || 1, inputSrcs 
+                    );
+                } else if (node.type === NodeType.TEXT_TO_VIDEO) {
+                    let effectiveModel = node.model;
+                    if (node.activeToolbarItem === 'start_end') {
+                        effectiveModel = (effectiveModel || '') + '_FL';
+                    }
+                    results = await generateVideo(
+                        node.prompt || '', inputSrcs, node.aspectRatio, effectiveModel, node.resolution, node.duration, node.count || 1
+                    );
+                }
+
+                if (results.length > 0) {
+                    const currentArtifacts = node.outputArtifacts || [];
+                    if (node.imageSrc && !currentArtifacts.includes(node.imageSrc)) currentArtifacts.push(node.imageSrc);
+                    if (node.videoSrc && !currentArtifacts.includes(node.videoSrc)) currentArtifacts.push(node.videoSrc);
+                    const newArtifacts = [...results, ...currentArtifacts];
+                    
+                    const updates: Partial<NodeData> = { isLoading: false, outputArtifacts: newArtifacts };
+                    if (node.type === NodeType.TEXT_TO_IMAGE) updates.imageSrc = results[0];
+                    else if (node.type === NodeType.TEXT_TO_VIDEO) updates.videoSrc = results[0];
+                    updateNodeData(nodeId, updates);
+                } else {
+                    throw new Error("No results returned");
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            alert(`Generation Failed: ${(e as Error).message}`);
+            updateNodeData(nodeId, { isLoading: false });
+        }
+    }, [nodes, updateNodeData, getInputImages]);
+
+    const handleMaximize = useCallback((nodeId: string, setPreviewMedia: (media: { url: string, type: 'image' | 'video' } | null) => void) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        if (node.videoSrc) setPreviewMedia({ url: node.videoSrc, type: 'video' });
+        else if (node.imageSrc) setPreviewMedia({ url: node.imageSrc, type: 'image' });
+        else alert("No content to preview.");
+    }, [nodes]);
+
+    const handleDownload = useCallback(async (nodeId: string) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        const url = node.videoSrc || node.imageSrc;
+        if (!url) { alert("No content to download."); return; }
+        
+        const ext = node.videoSrc ? 'mp4' : 'png';
+        const filename = `${node.title.replace(/\s+/g, '_')}_${Date.now()}.${ext}`;
+
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob as Blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl);
+        } catch (e) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.target = "_blank"; 
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }, [nodes]);
+
     const handleAlign = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
         if (selectedNodeIds.size < 2) return;
 
         setNodes(prevNodes => {
             const selected = prevNodes.filter(n => selectedNodeIds.has(n.id));
             const unselected = prevNodes.filter(n => !selectedNodeIds.has(n.id));
-            const updatedNodes = selected.map(n => ({ ...n }));
+            const updatedNodes = selected.map(n => ({ ...n })); 
 
             const isVerticalAlign = direction === 'UP' || direction === 'DOWN';
-            const OVERLAP_THRESHOLD = 10;
             
+            const OVERLAP_THRESHOLD = 10;
             const isOverlap = (a: NodeData, b: NodeData) => {
                 if (isVerticalAlign) {
                     const overlap = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
@@ -202,8 +255,8 @@ export function useNodeOperations({
             const minLeft = Math.min(...updatedNodes.map(n => n.x));
             const maxRight = Math.max(...updatedNodes.map(n => n.x + n.width));
 
-            const HORIZONTAL_GAP = 20;
-            const VERTICAL_GAP = 60;
+            const HORIZONTAL_GAP = 20; 
+            const VERTICAL_GAP = 60;   
 
             clusters.forEach(cluster => {
                 if (direction === 'UP') {
@@ -214,7 +267,7 @@ export function useNodeOperations({
                         currentY += node.height + VERTICAL_GAP;
                     });
                 } else if (direction === 'DOWN') {
-                    cluster.sort((a, b) => (b.y - a.y) || a.id.localeCompare(b.id));
+                    cluster.sort((a, b) => (b.y - a.y) || a.id.localeCompare(b.id)); 
                     let currentBottom = maxBottom;
                     cluster.forEach((node) => {
                         node.y = currentBottom - node.height;
@@ -228,7 +281,7 @@ export function useNodeOperations({
                         currentX += node.width + HORIZONTAL_GAP;
                     });
                 } else if (direction === 'RIGHT') {
-                    cluster.sort((a, b) => (b.x - a.x) || a.id.localeCompare(b.id));
+                    cluster.sort((a, b) => (b.x - a.x) || a.id.localeCompare(b.id)); 
                     let currentRight = maxRight;
                     cluster.forEach((node) => {
                         node.x = currentRight - node.width;
@@ -257,49 +310,29 @@ export function useNodeOperations({
                 const xOffset = 380;
                 const yOffset = 260;
                 const nodeWidth = 320;
-                const nodeHeight = 240;
-                
+                const nodeHeight = 240; 
                 const startNode: NodeData = {
-                    id: startNodeId,
-                    type: NodeType.ORIGINAL_IMAGE,
-                    x: videoNode.x - xOffset,
-                    y: videoNode.y,
-                    width: nodeWidth,
-                    height: nodeHeight,
-                    title: 'Start Frame',
-                    imageSrc: '',
-                    aspectRatio: '16:9',
-                    outputArtifacts: []
+                    id: startNodeId, type: NodeType.ORIGINAL_IMAGE, x: videoNode.x - xOffset, y: videoNode.y, width: nodeWidth, height: nodeHeight, 
+                    title: 'Start Frame', imageSrc: '', aspectRatio: '16:9', outputArtifacts: []
                 };
                 const endNode: NodeData = {
-                    id: endNodeId,
-                    type: NodeType.ORIGINAL_IMAGE,
-                    x: videoNode.x - xOffset,
-                    y: videoNode.y + yOffset,
-                    width: nodeWidth,
-                    height: nodeHeight,
-                    title: 'End Frame',
-                    imageSrc: '',
-                    aspectRatio: '16:9',
-                    outputArtifacts: []
+                    id: endNodeId, type: NodeType.ORIGINAL_IMAGE, x: videoNode.x - xOffset, y: videoNode.y + yOffset, width: nodeWidth, height: nodeHeight,
+                    title: 'End Frame', imageSrc: '', aspectRatio: '16:9', outputArtifacts: []
                 };
-                
                 setNodes(prev => [...prev, startNode, endNode]);
-                setConnections(prev => [
-                    ...prev,
-                    { id: generateId(), sourceId: startNodeId, targetId: nodeId },
-                    { id: generateId(), sourceId: endNodeId, targetId: nodeId }
-                ]);
+                setConnections(prev => [...prev, { id: generateId(), sourceId: startNodeId, targetId: nodeId }, { id: generateId(), sourceId: endNodeId, targetId: nodeId }]);
             }
         }
-    }, [nodes, connections, generateId, updateNodeData, setNodes, setConnections]);
+    }, [nodes, connections, updateNodeData, setNodes, setConnections]);
 
     return {
-        inputsMap,
-        getInputImages,
         addNode,
         deleteNode,
+        handleGenerate,
+        handleMaximize,
+        handleDownload,
         handleAlign,
         handleToolbarAction,
+        generateId,
     };
-}
+};
