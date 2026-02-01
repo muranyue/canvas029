@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import ContentEditable, { ContentEditableEvent } from 'react-contenteditable';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
@@ -11,110 +10,43 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
-// 使用 react-contenteditable 的 ContentEditablePromptInput - iOS 生产环境兼容性优化版本
+// 使用纯 Selection/Range API 的 ContentEditablePromptInput - 不依赖 execCommand
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
     placeholder?: string;
     isDark: boolean;
 }>(({ value, onChange, placeholder, isDark }, ref) => {
-    const contentEditableRef = useRef<HTMLElement>(null);
-    const htmlRef = useRef<string>('');
+    const divRef = useRef<HTMLDivElement>(null);
 
-    // 创建 chip HTML - 保留 chip 功能
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
 
-    // 从 HTML 提取纯文本 - 保留 chip 的 data-value
-    const htmlToPlainText = (html: string): string => {
-        const temp = document.createElement('div');
-        temp.innerHTML = html;
+    // 纯 Selection/Range API 插入文本
+    const insertAtCursor = (content: string, isHtml: boolean) => {
+        const div = divRef.current;
+        if (!div) return;
         
-        const extractText = (node: Node): string => {
-            let text = '';
-            node.childNodes.forEach(child => {
-                if (child.nodeType === Node.TEXT_NODE) {
-                    text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
-                } else if (child.nodeType === Node.ELEMENT_NODE) {
-                    const el = child as HTMLElement;
-                    if (el.classList.contains('chip')) {
-                        text += el.dataset.value || el.textContent || '';
-                    } else if (el.tagName === 'BR') {
-                        text += '\n';
-                    } else if (el.tagName === 'DIV') {
-                        const divText = extractText(el);
-                        text += (text && !text.endsWith('\n') ? '\n' : '') + divText;
-                    } else {
-                        text += extractText(el);
-                    }
-                }
-            });
-            return text;
-        };
-        
-        return extractText(temp);
-    };
-
-    // 将纯文本转换为 HTML（包含 chip）
-    const plainTextToHtml = (text: string): string => {
-        if (!text) return '';
-        const regex = /(@(?:image|video)\s+\d+)/gi;
-        const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
-        return text.split(regex).map(part => {
-            if (part.match(regex)) {
-                return createChipHtml(part);
-            }
-            return escapeHtml(part);
-        }).join('').replace(/\n/g, '<br>');
-    };
-
-    // 初始化和同步 HTML
-    useEffect(() => {
-        const newHtml = plainTextToHtml(value);
-        if (htmlRef.current !== newHtml) {
-            htmlRef.current = newHtml;
-        }
-    }, [value]);
-
-    // iOS 兼容：组件挂载后强制配置属性
-    useEffect(() => {
-        const domNode = contentEditableRef.current;
-        if (!domNode) return;
-        
-        domNode.contentEditable = 'true';
-        domNode.spellcheck = false;
-        domNode.setAttribute('autocorrect', 'off');
-        domNode.setAttribute('autocapitalize', 'off');
-        domNode.style.position = 'relative';
-        domNode.style.zIndex = '1';
-    }, []);
-
-    // iOS 兼容：处理内容变化 + 强制重绘
-    const handleChange = useCallback((evt: ContentEditableEvent) => {
-        let newHtml = evt.target.value || '';
-        
-        // iOS 兼容：清理非 chip 的 span 标签
-        newHtml = newHtml
-            .replace(/<span(?![^>]*class="[^"]*chip[^"]*")[^>]*>(.*?)<\/span>/gi, '$1')
-            .replace(/&nbsp;/gi, ' ');
-        
-        htmlRef.current = newHtml;
-        const plainText = htmlToPlainText(newHtml);
-        onChange(plainText);
-    }, [onChange]);
-
-    // 插入文本到光标位置
-    const insertAtCursor = useCallback((content: string, isHtml: boolean) => {
-        const el = contentEditableRef.current;
-        if (!el) return;
-        
-        el.focus();
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
+        if (!sel) return;
         
-        const range = sel.getRangeAt(0);
+        // 确保有选区
+        let range: Range;
+        if (sel.rangeCount > 0) {
+            range = sel.getRangeAt(0);
+            // 确保选区在当前 div 内
+            if (!div.contains(range.commonAncestorContainer)) {
+                range = document.createRange();
+                range.selectNodeContents(div);
+                range.collapse(false);
+            }
+        } else {
+            range = document.createRange();
+            range.selectNodeContents(div);
+            range.collapse(false);
+        }
+        
         range.deleteContents();
         
         if (isHtml) {
@@ -141,110 +73,130 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        const newHtml = el.innerHTML;
-        htmlRef.current = newHtml;
-        onChange(htmlToPlainText(newHtml));
-    }, [onChange]);
+        // 触发 input 事件更新 value
+        const newText = getPlainText(div);
+        onChange(newText);
+    };
 
-    // 暴露 insertText 方法
     React.useImperativeHandle(ref, () => ({
         insertText: (text: string) => {
-            setTimeout(() => {
-                if (text.startsWith('@')) {
-                    insertAtCursor(createChipHtml(text), true);
-                } else {
-                    insertAtCursor(text, false);
-                }
-            }, 0);
+            if (divRef.current) {
+                divRef.current.focus();
+                // 使用 setTimeout 确保 focus 生效
+                setTimeout(() => {
+                    if (text.startsWith('@')) {
+                        insertAtCursor(createChipHtml(text), true);
+                    } else {
+                        insertAtCursor(text, false);
+                    }
+                }, 0);
+            }
         }
-    }), [insertAtCursor]);
+    }));
 
-    // 处理粘贴 - 只粘贴纯文本
-    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const parseTextToHtml = (text: string) => {
+        if (!text) return '';
+        const regex = /(@(?:image|video)\s+\d+)/gi;
+        const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+        return text.split(regex).map(part => {
+            if (part.match(regex)) {
+                return createChipHtml(part);
+            }
+            return escapeHtml(part);
+        }).join('').replace(/\n/g, '<br>');
+    };
+
+    const getPlainText = (node: Node): string => {
+        let text = '';
+        node.childNodes.forEach(child => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent?.replace(/\u00A0/g, ' ').replace(/\u200B/g, '') || '';
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const el = child as HTMLElement;
+                if (el.classList.contains('chip')) {
+                    text += el.dataset.value || '';
+                } else if (el.tagName === 'BR') {
+                    text += '\n';
+                } else if (el.tagName === 'DIV') {
+                    text += '\n' + getPlainText(el);
+                } else {
+                    text += getPlainText(el);
+                }
+            }
+        });
+        return text;
+    };
+
+    useEffect(() => {
+        if (divRef.current && document.activeElement !== divRef.current) {
+            const currentText = getPlainText(divRef.current);
+            const normalizedValue = value.replace(/\s+/g, ' ');
+            const normalizedCurrent = currentText.replace(/\s+/g, ' ');
+
+            if (normalizedValue !== normalizedCurrent) {
+                divRef.current.innerHTML = parseTextToHtml(value);
+            }
+        }
+    }, [value]);
+
+    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
         insertAtCursor(text, false);
-    }, [insertAtCursor]);
+    };
 
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
-    }, []);
+    };
 
-    // iOS 专用：触摸时强制获取焦点并弹出键盘
-    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-        const el = contentEditableRef.current;
-        if (!el) return;
-        
-        // 先 blur 其他所有 contenteditable 元素
-        const allEditables = document.querySelectorAll('[contenteditable="true"]');
-        allEditables.forEach(editable => {
-            if (editable !== el) {
-                (editable as HTMLElement).blur();
-            }
-        });
-        
-        // 强制聚焦当前元素
-        el.focus();
-        
-        // 设置光标到末尾
-        const range = document.createRange();
-        const sel = window.getSelection();
-        if (sel && el.childNodes.length > 0) {
-            range.selectNodeContents(el);
-            range.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
-    }, []);
+    const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
+        const newText = getPlainText(e.currentTarget);
+        onChange(newText);
+    };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
-    const textColor = isDark ? 'text-gray-200' : 'text-gray-900';
+    const textColor = isDark ? 'text-zinc-200' : 'text-gray-900';
 
     return (
         <div
-            className={`editable-wrapper ${isDark ? 'dark' : 'light'} ${textColor} relative w-full min-h-[70px] group/input border rounded-xl flex flex-col ${containerBg} ${borderColor}`}
-            style={{
-                overflow: 'visible',
-                transform: 'none',
-                WebkitTransform: 'none',
-                height: 'auto',
-                color: isDark ? '#e4e4e7' : '#18181b',
-            }}
+            className={`relative w-full min-h-[70px] group/input border rounded-xl overflow-hidden flex flex-col ${containerBg} ${borderColor}`}
             onWheel={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+                e.stopPropagation();
+                if (divRef.current && document.activeElement !== divRef.current) {
+                    divRef.current.focus();
+                }
+            }}
             data-interactive="true"
         >
-            <ContentEditable
-                innerRef={contentEditableRef}
-                html={htmlRef.current}
-                onChange={handleChange}
-                onPaste={handlePaste}
+            <div
+                ref={divRef}
+                className={`w-full flex-1 p-3 text-[10px] font-sans leading-relaxed outline-none overflow-y-auto max-h-[100px] ${textColor} relative z-10 ${isDark ? 'node-scroll-dark' : 'node-scroll'} editable-input ${isDark ? 'editable-input-dark' : 'editable-input-light'}`}
+                contentEditable
+                onInput={handleInput}
+                onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
-                onTouchEnd={handleTouchEnd}
-                className={`editable-input w-full flex-1 outline-none overflow-y-auto max-h-[100px] relative z-10 md:z-10 z-[80] ${isDark ? 'node-scroll-dark editable-input-dark' : 'node-scroll editable-input-light'}`}
-                style={{ 
-                    whiteSpace: 'pre-wrap', 
-                    minHeight: '70px', 
-                    cursor: 'text', 
-                    WebkitUserSelect: 'text', 
-                    userSelect: 'text',
-                    fontSize: '16px',
-                    lineHeight: '1.75',
-                    padding: '12px',
-                    WebkitTextSizeAdjust: '100%',
-                    caretColor: 'auto',
-                    color: isDark ? '#e4e4e7' : '#18181b',
-                    WebkitTextFillColor: isDark ? '#e4e4e7' : '#18181b',
-                } as React.CSSProperties}
-                disabled={false}
+                onPaste={handlePaste}
+                onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    if (divRef.current && document.activeElement !== divRef.current) {
+                        divRef.current.focus();
+                    }
+                }}
+                suppressContentEditableWarning
                 spellCheck={false}
+                style={{ whiteSpace: 'pre-wrap', minHeight: '70px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
             {!value && (
-                <div 
-                    className={`absolute pointer-events-none ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}
-                    style={{ top: '12px', left: '12px', fontSize: '16px', lineHeight: '1.75' }}
-                >
+                <div className={`absolute top-3 left-3 pointer-events-none text-[10px] font-sans leading-relaxed ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
                     {placeholder}
                 </div>
             )}
@@ -351,9 +303,9 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
 
     return (
       <>
-        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+        <div className="absolute bottom-full left-0 w-full mb-2 flex items-center justify-between pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
            <div className="flex items-center gap-2 pl-1"><LocalEditableTitle title={data.title} onUpdate={(t) => updateData(data.id, { title: t })} isDark={isDark} /></div>
-           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
+           <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12} /></button>
                <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDownload?.(data.id); }} data-interactive="true"><Icons.Download size={12} /></button>
                <button title="Delete" className={`p-1 rounded transition-colors text-red-400 xl:hidden ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`} onClick={(e) => { e.stopPropagation(); onDelete?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete?.(data.id); }} data-interactive="true"><Icons.Trash2 size={12} /></button>
@@ -373,7 +325,7 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
         </div>
 
         {isSelectedAndStable && showControls && (
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[400px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-full min-w-[450px] pt-3 z-[70] pointer-events-auto" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
                  {inputs.length > 0 && <LocalInputThumbnails inputs={inputs} ready={deferredInputs} isDark={isDark} />}
                  <div className={`${controlPanelBg} rounded-2xl p-3 shadow-2xl flex flex-col gap-3 border`}>
                       <div className="flex flex-col" data-interactive="true">

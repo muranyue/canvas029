@@ -1,98 +1,144 @@
 /* ===========================================
-   iOS Mobile Compatibility Fixes
-   仅针对 iOS 移动端的兼容性修复
+   Desktop & Mobile Compatibility Styles
+   桌面端和移动端兼容性样式
    =========================================== */
 
 /* ============================================
-   react-contenteditable 核心兼容样式（iOS 打包后必加）
+   桌面端样式 - 使用030项目的标准布局
    ============================================ */
 
-/* 通用 editable-input 样式 - 解决「输入了但看不见」的核心问题 */
-.editable-input {
-    /* iOS 真机文字颜色修复 - 强制显式颜色而非 currentColor */
-    color: inherit !important;
-    -webkit-text-fill-color: inherit !important;
-    opacity: 1 !important;
-    visibility: visible !important;
+@media (min-width: 768px) {
+    /* 桌面端 editable-input 样式 */
+    .editable-input {
+        font-size: 12px;
+        line-height: 1.75rem; /* leading-7 */
+        padding: 12px;
+        color: inherit;
+        -webkit-text-fill-color: inherit;
+    }
     
-    /* 确保可交互+渲染区域 */
-    user-select: text !important;
-    -webkit-user-select: text !important;
-    pointer-events: auto !important;
-    font-size: 16px !important;
-    line-height: 1.75 !important;
+    /* 桌面端深色模式 */
+    .editable-input-dark {
+        color: #a1a1aa; /* text-zinc-200 的实际值 */
+        -webkit-text-fill-color: #a1a1aa;
+    }
     
-    /* 保留换行 */
-    white-space: pre-wrap !important;
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
+    /* 桌面端浅色模式 */
+    .editable-input-light {
+        color: #18181b;
+        -webkit-text-fill-color: #18181b;
+    }
     
-    /* 兜底：确保渲染层级 */
-    position: relative !important;
-    z-index: 1 !important;
-    display: block !important;
-    width: 100% !important;
-    padding: 12px !important;
-    outline: none !important;
+    /* 桌面端父容器 */
+    .editable-wrapper {
+        overflow: hidden;
+    }
     
-    /* 防止 iOS 自动调整 */
-    -webkit-text-size-adjust: 100% !important;
-    text-size-adjust: 100% !important;
-    caret-color: auto !important;
+    .editable-wrapper.dark {
+        color: #a1a1aa;
+    }
     
-    /* 关键：允许键盘弹起 */
-    touch-action: auto !important;
-}
-
-/* 深色模式 - iOS 真机显式颜色 */
-.editable-input-dark {
-    color: #e4e4e7 !important;
-    -webkit-text-fill-color: #e4e4e7 !important;
-    background-color: transparent !important;
-}
-
-/* 浅色模式 - iOS 真机显式颜色 */
-.editable-input-light {
-    color: #18181b !important;
-    -webkit-text-fill-color: #18181b !important;
-    background-color: transparent !important;
-}
-
-/* 父容器样式 - iOS 真机文字颜色继承修复 */
-.editable-wrapper {
-    overflow: visible !important;
-    height: auto !important;
-    color: inherit !important;
-}
-
-/* 深色模式父容器 */
-.editable-wrapper.dark {
-    color: #e4e4e7 !important;
-}
-
-/* 浅色模式父容器 */
-.editable-wrapper.light {
-    color: #18181b !important;
+    .editable-wrapper.light {
+        color: #18181b;
+    }
+    
+    /* 桌面端 contenteditable */
+    [contenteditable="true"] {
+        font-size: 12px;
+        line-height: 1.75rem;
+        padding: 12px;
+    }
 }
 
 /* ============================================
-   ContentEditable 核心样式 - 防止打包压缩影响
+   移动端样式 - iOS 兼容性修复（保持不变）
    ============================================ */
 
-[contenteditable="true"] {
-    font-size: 16px !important;
-    line-height: 1.75 !important;
-    padding: 12px !important;
-    caret-color: auto !important;
-    -webkit-text-size-adjust: 100% !important;
-    text-size-adjust: 100% !important;
-    -webkit-user-select: text !important;
-    user-select: text !important;
-    /* 关键：允许键盘弹起 */
-    touch-action: auto !important;
-    /* iOS 真机文字颜色显式设置 */
-    color: inherit !important;
-    -webkit-text-fill-color: inherit !important;
+@media (max-width: 767px) {
+    /* 通用 editable-input 样式 - 解决「输入了但看不见」的核心问题 */
+    .editable-input {
+        /* iOS 真机文字颜色修复 - 强制显式颜色而非 currentColor */
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        
+        /* 确保可交互+渲染区域 */
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        pointer-events: auto !important;
+        font-size: 16px !important;
+        line-height: 1.75 !important;
+        
+        /* 保留换行 */
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        
+        /* 兜底：确保渲染层级 */
+        position: relative !important;
+        z-index: 1 !important;
+        display: block !important;
+        width: 100% !important;
+        padding: 12px !important;
+        outline: none !important;
+        
+        /* 防止 iOS 自动调整 */
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
+        caret-color: auto !important;
+        
+        /* 关键：允许键盘弹起 */
+        touch-action: auto !important;
+    }
+
+    /* 深色模式 - iOS 真机显式颜色 */
+    .editable-input-dark {
+        color: #e4e4e7 !important;
+        -webkit-text-fill-color: #e4e4e7 !important;
+        background-color: transparent !important;
+    }
+
+    /* 浅色模式 - iOS 真机显式颜色 */
+    .editable-input-light {
+        color: #18181b !important;
+        -webkit-text-fill-color: #18181b !important;
+        background-color: transparent !important;
+    }
+
+    /* 父容器样式 - iOS 真机文字颜色继承修复 */
+    .editable-wrapper {
+        overflow: visible !important;
+        height: auto !important;
+        color: inherit !important;
+    }
+
+    /* 深色模式父容器 */
+    .editable-wrapper.dark {
+        color: #e4e4e7 !important;
+    }
+
+    /* 浅色模式父容器 */
+    .editable-wrapper.light {
+        color: #18181b !important;
+    }
+
+    /* ContentEditable 核心样式 - 防止打包压缩影响 */
+    [contenteditable="true"] {
+        font-size: 16px !important;
+        line-height: 1.75 !important;
+        padding: 12px !important;
+        caret-color: auto !important;
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        /* 关键：允许键盘弹起 */
+        touch-action: auto !important;
+        /* iOS 真机文字颜色显式设置 */
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
+    }
 }
 
 /* ============================================

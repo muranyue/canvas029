@@ -1,9 +1,8 @@
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { NodeData } from '../../../types';
 import { Icons } from '../../Icons';
 import { VideoPreview, safeDownload } from './NodeComponents';
-import { useThumbnail } from './LocalNodeComponents';
 
 interface MediaStackProps {
     data: NodeData;
@@ -22,9 +21,6 @@ export const MediaStack: React.FC<MediaStackProps> = ({
     const artifacts = data.outputArtifacts || [];
     const sortedArtifacts = currentSrc ? [currentSrc, ...artifacts.filter(a => a !== currentSrc)] : artifacts;
     const showBadge = !data.isStackOpen && artifacts.length > 1;
-    
-    // 使用缩略图 - 节点内显示缩略图（1k清晰度），放大时显示原图
-    const thumbnail = useThumbnail(currentSrc, 1024);
 
     // Handle click outside to close stack
     useEffect(() => {
@@ -91,10 +87,10 @@ export const MediaStack: React.FC<MediaStackProps> = ({
            {isVideo ? (
                currentSrc && <VideoPreview src={currentSrc} isDark={isDark || false} />
            ) : (
-               thumbnail && <img src={thumbnail} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
+               currentSrc && <img src={currentSrc} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
            )}
            {showBadge && (
-               <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} data-interactive="true">
+               <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()}>
                    <Icons.Layers size={10} className="text-cyan-400"/>
                    <span className="font-bold tabular-nums">{artifacts.length}</span>
                    <Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" />
