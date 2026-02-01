@@ -1608,30 +1608,26 @@ const CanvasWithSidebar: React.FC = () => {
       // Centered toolbar logic using translateX
       return (
           <div className="absolute z-[150] flex flex-col items-center pointer-events-none" style={{ left: pos.x, top: pos.y - 60, transform: 'translateX(-50%)' }}>
-              <div className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`} onTouchStart={(e) => e.stopPropagation()}>
+              <div className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`}>
                   
                   <div className="relative border-r border-gray-500/20 pr-1.5 mr-1.5">
                       <button 
                           className={`w-6 h-6 rounded-md border flex items-center justify-center transition-transform hover:scale-105 ${isDark ? 'border-white/10' : 'border-black/5'}`}
                           style={{ backgroundColor: currentColor }}
                           onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
-                          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
                           title="Select Color"
-                          data-interactive="true"
                       >
                           {showColorPicker ? <Icons.ChevronLeft size={12} className="text-black/50 rotate-90"/> : null}
                       </button>
 
                       {showColorPicker && (
-                          <div className={`absolute top-full left-0 mt-2 p-2 rounded-xl shadow-2xl border grid grid-cols-4 gap-1.5 z-50 min-w-[120px] ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`} onTouchStart={(e) => e.stopPropagation()}>
+                          <div className={`absolute top-full left-0 mt-2 p-2 rounded-xl shadow-2xl border grid grid-cols-4 gap-1.5 z-50 min-w-[120px] ${isDark ? 'bg-[#1A1D21] border-zinc-700' : 'bg-white border-gray-200'}`}>
                               {GROUP_COLORS.map(color => (
                                   <button
                                       key={color}
                                       className={`w-5 h-5 rounded-full border transition-transform hover:scale-125 ${isDark ? 'border-white/10' : 'border-black/5'} ${color === currentColor ? 'ring-2 ring-cyan-500 ring-offset-1 ring-offset-black/20' : ''}`}
                                       style={{ backgroundColor: color }}
                                       onClick={(e) => { e.stopPropagation(); handleGroupColorChange(color); }}
-                                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGroupColorChange(color); }}
-                                      data-interactive="true"
                                   />
                               ))}
                           </div>
@@ -1639,11 +1635,11 @@ const CanvasWithSidebar: React.FC = () => {
                   </div>
 
                   {singleGroupSelected ? (
-                      <button onClick={handleUngroup} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleUngroup(); }} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`} data-interactive="true">
+                      <button onClick={handleUngroup} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
                           <Icons.LayoutGrid size={14}/> Ungroup
                       </button>
                   ) : (
-                      <button onClick={handleGroupSelection} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); handleGroupSelection(); }} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-cyan-600 hover:bg-cyan-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 text-white'}`} data-interactive="true">
+                      <button onClick={handleGroupSelection} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-cyan-600 hover:bg-cyan-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 text-white'}`}>
                           <Icons.LayoutGrid size={14}/> Group
                       </button>
                   )}
@@ -1884,9 +1880,9 @@ const CanvasWithSidebar: React.FC = () => {
             {renderQuickAddMenu()}
             {renderNewWorkflowDialog()}
             {previewMedia && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPreviewMedia(null)} onTouchEnd={(e) => { e.preventDefault(); setPreviewMedia(null); }} data-interactive="true">
-                    <div className="relative max-w-[90vw] max-h-[90vh] bg-black rounded-lg shadow-2xl overflow-hidden border border-zinc-700" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
-                         <button className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-red-500 transition-colors z-10 pointer-events-auto" onClick={() => setPreviewMedia(null)} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewMedia(null); }} data-interactive="true"><Icons.X size={20} /></button>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPreviewMedia(null)} onTouchEnd={(e) => { e.preventDefault(); setPreviewMedia(null); }}>
+                    <div className="relative max-w-[90vw] max-h-[90vh] bg-black rounded-lg shadow-2xl overflow-hidden border border-zinc-700" onClick={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+                         <button className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded-full hover:bg-red-500 transition-colors z-10" onClick={() => setPreviewMedia(null)} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewMedia(null); }}><Icons.X size={20} /></button>
                          {previewMedia.type === 'video' ? <video src={previewMedia.url} controls autoPlay className="max-w-full max-h-[90vh]" /> : <img src={previewMedia.url} alt="Preview" className="max-w-full max-h-[90vh] object-contain" />}
                     </div>
                 </div>
