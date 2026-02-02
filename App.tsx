@@ -1031,8 +1031,11 @@ const CanvasWithSidebar: React.FC = () => {
             
             <div 
                 ref={containerRef}
-                className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing"
-                style={{ backgroundColor: canvasBg }}
+                className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing grid-pattern"
+                style={{ 
+                    backgroundColor: canvasBg,
+                    '--grid-color': isDark ? '#27272a' : '#E4E4E7'
+                } as React.CSSProperties}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
