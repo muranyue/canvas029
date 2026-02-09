@@ -60,7 +60,8 @@ export const generateStandardImage = async (
        if (resolution !== '1k') payload.quality = 'hd';
        delete payload.response_format; 
    } else if (isJimeng) {
-       payload.size = aspectRatio; 
+       payload.size = calculatedSize;
+       payload.response_format = "url";
    } else {
        payload.size = calculatedSize;
    }

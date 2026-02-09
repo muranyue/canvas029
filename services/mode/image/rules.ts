@@ -73,13 +73,32 @@ export const calculateImageSize = (aspectRatio: string, resolution: string, mode
   const supportsHighRes = ['BananaPro', 'Banana Pro Edit', 'Jmeng 4.5'].includes(modelName);
 
   if (supportsHighRes) {
-      if (resolution === '2k') {
-          width *= 2; height *= 2;
-      } else if (resolution === '4k') {
-          if (is16_9) { width = 4096; height = 2160; }
-          else if (is9_16) { width = 2160; height = 4096; }
-          else {
-            width *= 4; height *= 4;
+      // Special handling for Jmeng models
+      if (modelName === 'Jmeng 4.5') {
+          let longEdge = 1920; // Default 1k
+          if (resolution === '2k') longEdge = 2560;
+          else if (resolution === '4k') longEdge = 4096;
+
+          // Calculate dimensions based on aspect ratio with long edge constraint
+          if (w >= h) {
+              // Landscape or square
+              width = longEdge;
+              height = Math.round(longEdge * (h / w));
+          } else {
+              // Portrait
+              height = longEdge;
+              width = Math.round(longEdge * (w / h));
+          }
+      } else {
+          // Original logic for BananaPro and Banana Pro Edit
+          if (resolution === '2k') {
+              width *= 2; height *= 2;
+          } else if (resolution === '4k') {
+              if (is16_9) { width = 4096; height = 2160; }
+              else if (is9_16) { width = 2160; height = 4096; }
+              else {
+                width *= 4; height *= 4;
+              }
           }
       }
   }

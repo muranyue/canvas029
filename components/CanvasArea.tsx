@@ -10,6 +10,7 @@ interface CanvasAreaProps {
     // Refs
     containerRef: React.RefObject<HTMLDivElement | null>;
     connectionStartRef: React.MutableRefObject<{ nodeId: string; type: 'source' | 'target' } | null>;
+    spacePressed: React.MutableRefObject<boolean>;
     // State
     nodes: NodeData[];
     visibleNodes: NodeData[];
@@ -73,7 +74,7 @@ interface CanvasAreaProps {
 }
 
 export const CanvasArea: React.FC<CanvasAreaProps> = ({
-    containerRef, connectionStartRef,
+    containerRef, connectionStartRef, spacePressed,
     nodes, visibleNodes, visibleConnections, transform, canvasBg,
     selectedNodeIds, selectedConnectionId, selectionBox, dragMode,
     tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
@@ -98,7 +99,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
     return (
         <div
             ref={containerRef}
-            className="flex-1 relative overflow-hidden cursor-grab active:cursor-grabbing grid-pattern"
+            className={`flex-1 relative overflow-hidden grid-pattern ${dragMode === 'PAN' ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{ backgroundColor: canvasBg, '--grid-color': isDark ? '#27272a' : '#E4E4E7' } as React.CSSProperties}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
