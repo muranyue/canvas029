@@ -116,8 +116,31 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
         height: scaleSize(viewWorld.h)
     };
 
-    // Drag Logic
+    // Drag Logic (Mouse + Touch)
     const dragRef = useRef<{ startX: number, startY: number, startTx: number, startTy: number } | null>(null);
+
+    const handleDragMove = (clientX: number, clientY: number) => {
+        if (!dragRef.current) return;
+        
+        const dx = clientX - dragRef.current.startX;
+        const dy = clientY - dragRef.current.startY;
+        
+        const worldDx = dx / layout.scale;
+        const worldDy = dy / layout.scale;
+        
+        const newTx = dragRef.current.startTx - worldDx * transform.k;
+        const newTy = dragRef.current.startTy - worldDy * transform.k;
+        
+        onNavigate(newTx, newTy);
+    };
+
+    const handleDragEnd = () => {
+        dragRef.current = null;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+    };
 
     const handleMouseDown = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -134,35 +157,44 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-        if (!dragRef.current) return;
-        
-        const dx = e.clientX - dragRef.current.startX;
-        const dy = e.clientY - dragRef.current.startY;
-        
-        // Convert screen pixel delta to world units
-        // deltaWorld = deltaMini / layout.scale
-        const worldDx = dx / layout.scale;
-        const worldDy = dy / layout.scale;
-        
-        // Update Canvas Transform
-        // Dragging the frame Right means moving the Camera Right.
-        // Camera Right = Canvas Transform X becomes smaller (World moves Left)
-        const newTx = dragRef.current.startTx - worldDx * transform.k;
-        const newTy = dragRef.current.startTy - worldDy * transform.k;
-        
-        onNavigate(newTx, newTy);
+        handleDragMove(e.clientX, e.clientY);
     };
 
     const handleMouseUp = () => {
-        dragRef.current = null;
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        handleDragEnd();
+    };
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const touch = e.touches[0];
+        dragRef.current = {
+            startX: touch.clientX,
+            startY: touch.clientY,
+            startTx: transform.x,
+            startTy: transform.y
+        };
+        
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handleDragMove(touch.clientX, touch.clientY);
+    };
+
+    const handleTouchEnd = () => {
+        handleDragEnd();
     };
 
     useEffect(() => {
         return () => {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('touchmove', handleTouchMove);
+            document.removeEventListener('touchend', handleTouchEnd);
         };
     }, []);
 
@@ -213,6 +245,7 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
                     boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)' // Dim outside area
                 }}
                 onMouseDown={handleMouseDown}
+                onTouchStart={handleTouchStart}
             />
         </div>
     );

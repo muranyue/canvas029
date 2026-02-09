@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Reply in Chinese",
+  "description": "用中文回答用户的问题，不要生成多余的说明文件，除非用户明确要求",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "请用中文回答用户的问题。不要生成多余的文件（如总结文档、分析报告等），除非用户明确要求创建文件。"
+  },
+  "workspaceFolderName": "canvas029",
+  "shortName": "reply-in-chinese"
+}
