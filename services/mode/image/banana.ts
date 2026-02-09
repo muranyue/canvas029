@@ -60,7 +60,7 @@ export const generateBananaEdit = async (
     };
 
     if (hasInput) {
-        payload.image_urls = [inputImages[0]];
+        payload.image_urls = inputImages;
     }
 
     const res = await fetchThirdParty(targetUrl, 'POST', payload, config, { timeout: 200000 });
