@@ -85,6 +85,7 @@ export const QwenEditHandler = {
 export const IMAGE_HANDLERS: Record<string, any> = {
     'BananaPro': BananaProHandler,
     'Banana Pro Edit': BananaProEditHandler,
+    'Banana 2': BananaProEditHandler,
     'Banana': BananaHandler,
     'Flux2': Flux2Handler,
     'Jmeng 4.5': Jimeng45Handler,

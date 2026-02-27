@@ -7,6 +7,40 @@ const DEFAULT_NODE_HEIGHT = 240;
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+const formatErrorMessage = (error: unknown): string => {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+
+    if (typeof error === 'string' && error.trim()) {
+        return error;
+    }
+
+    if (error && typeof error === 'object') {
+        const e = error as any;
+        const type = e.type || e.error?.type || e.name;
+        const code = e.code || e.error?.code || e.status;
+        const message = e.message || e.error?.message || e.fail_reason || e.detail || e.msg;
+
+        const parts: string[] = [];
+        if (type) parts.push(`[${type}]`);
+        if (code) parts.push(`(${code})`);
+        if (message) parts.push(String(message));
+
+        if (parts.length > 0) {
+            return parts.join(' ');
+        }
+
+        try {
+            return JSON.stringify(error);
+        } catch (_err) {
+            // no-op
+        }
+    }
+
+    return 'Unknown error';
+};
+
 // Helper for resizing imported media constraints
 export const calculateImportDimensions = (naturalWidth: number, naturalHeight: number) => {
     const ratio = naturalWidth / naturalHeight;
@@ -163,7 +197,7 @@ export const useNodeOperations = ({
             }
         } catch (e) {
             console.error(e);
-            alert(`Generation Failed: ${(e as Error).message}`);
+            alert(`Generation Failed: ${formatErrorMessage(e)}`);
             updateNodeData(nodeId, { isLoading: false });
         }
     }, [nodes, updateNodeData, getInputImages]);

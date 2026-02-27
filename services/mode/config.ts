@@ -25,6 +25,13 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
       category: 'IMAGE', 
       defaultEndpoint: '/api/gemini/nano-banana'
   },
+  'Banana 2': {
+      id: 'gemini-3.1-flash-image-preview',
+      name: 'Banana 2',
+      type: 'BANANA_EDIT_ASYNC',
+      category: 'IMAGE',
+      defaultEndpoint: '/api/gemini/nano-banana'
+  },
   'Banana': { id: 'gemini-2.5-flash-image-preview', name: 'Banana', type: 'CHAT', category: 'IMAGE', defaultEndpoint: '/v1/chat/completions' },
   'Flux2': { id: 'flux-kontext-pro', name: 'Flux 2', type: 'IMAGE_GEN', category: 'IMAGE', defaultEndpoint: '/v1/images/generations' },
   

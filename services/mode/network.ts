@@ -51,17 +51,29 @@ export const fetchThirdParty = async (url: string, method: string, body: any, co
           if (!response.ok) {
             const errText = await response.text();
             let errMsg = errText;
+            let errType = '';
+            let errCode = '';
             try {
                 const jsonErr = JSON.parse(errText);
                 if (jsonErr.error && jsonErr.error.message) {
                     errMsg = jsonErr.error.message;
+                    errType = jsonErr.error.type || jsonErr.error.error_type || '';
+                    errCode = jsonErr.error.code || jsonErr.error.error_code || '';
                 } else if (jsonErr.message) {
                     errMsg = jsonErr.message;
                 } else if (jsonErr.fail_reason) {
                     errMsg = jsonErr.fail_reason;
                 }
+                if (!errType) errType = jsonErr.type || jsonErr.error_type || '';
+                if (!errCode) errCode = jsonErr.code || jsonErr.error_code || '';
             } catch (e) {}
-            const error: any = new Error(`API Error ${response.status}: ${errMsg}`);
+            const details: string[] = [];
+            if (errType) details.push(`[${errType}]`);
+            if (errCode) details.push(`(${errCode})`);
+            details.push(errMsg);
+            const error: any = new Error(`API Error ${response.status}: ${details.join(' ')}`);
+            if (errType) error.name = String(errType);
+            if (errCode) error.code = errCode;
             if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
                 error.isNonRetryable = true;
             }
