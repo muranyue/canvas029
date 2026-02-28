@@ -35,6 +35,7 @@ interface CanvasAreaProps {
     handleMaximize: (id: string, setPreviewMedia: any) => void;
     handleDownload: (id: string) => void;
     handleToolbarAction: (nodeId: string, action: string) => void;
+    handleUpload: (id: string) => void;
     deleteNode: (id: string) => void;
     setPreviewMedia: React.Dispatch<React.SetStateAction<{ url: string; type: 'image' | 'video' } | null>>;
     setSelectedConnectionId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -80,7 +81,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
     tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
     viewportSize, isDark,
     getInputImages, updateNodeData, handleGenerate, handleMaximize, handleDownload,
-    handleToolbarAction, deleteNode, setPreviewMedia, setSelectedConnectionId, setShowColorPicker,
+    handleToolbarAction, handleUpload, deleteNode, setPreviewMedia, setSelectedConnectionId, setShowColorPicker,
     removeConnection, setShowMinimap,
     handleGroupSelection, handleUngroup, handleGroupColorChange, getSelectionCenter,
     handleMouseDown, handleMouseMove, handleMouseUp, handleWheel,
@@ -183,6 +184,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                             onDownload={handleDownload}
                             onDelete={deleteNode}
                             onToolbarAction={handleToolbarAction}
+                            onUpload={handleUpload}
                             isDark={isDark}
                             isSelecting={dragMode === 'SELECT' || dragMode === 'DRAG_NODE'}
                         />

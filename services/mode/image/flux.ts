@@ -14,9 +14,11 @@ export const generateStandardImage = async (
     promptOptimize?: boolean
 ): Promise<string[]> => {
    const targetUrl = constructUrl(config.baseUrl, config.endpoint);
+   const normalizedModelId = (config.modelId || '').toLowerCase();
+   const normalizedCount = Number.isFinite(n) ? Math.max(1, n) : 1;
    const isFlux = modelDef.id.includes('flux'); 
-   const isJimeng = modelDef.id.includes('jimeng');
-   const isDoubao = modelDef.id.includes('doubao');
+   const isJimeng = modelDef.id.includes('jimeng') || normalizedModelId.includes('doubao-seedream-4-');
+   const isDoubao = modelDef.id.includes('doubao') || normalizedModelId.includes('doubao');
    const isZimage = modelDef.id.includes('z-image');
 
    if ((isFlux || isZimage) && n > 1) {
@@ -52,7 +54,7 @@ export const generateStandardImage = async (
    }
 
    const payload: any = {
-      model: config.modelId, prompt, n: n, response_format: "b64_json" 
+      model: config.modelId, prompt, n: normalizedCount, response_format: "b64_json" 
    };
 
    if (isFlux) {
@@ -68,7 +70,12 @@ export const generateStandardImage = async (
 
    if (isDoubao) {
        payload.watermark = false;
-       if (resolution === '2k' || resolution === '4k') payload.response_format = 'url';
+       if (!isJimeng && (resolution === '2k' || resolution === '4k')) payload.response_format = 'url';
+   }
+   if (isJimeng) {
+       payload.sequential_image_generation = normalizedCount > 1 ? 'auto' : 'disabled';
+       payload.sequential_image_generation_options = { max_images: normalizedCount };
+       if (inputImages.length > 0) payload.image = inputImages;
    }
    if (isZimage) {
        payload.watermark = false;

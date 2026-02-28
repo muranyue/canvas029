@@ -183,6 +183,7 @@ const CanvasWithSidebar: React.FC = () => {
                 handleMaximize={handleMaximize}
                 handleDownload={handleDownload}
                 handleToolbarAction={handleToolbarAction}
+                handleUpload={triggerReplaceImage}
                 deleteNode={deleteNode}
                 setPreviewMedia={setPreviewMedia}
                 setSelectedConnectionId={setSelectedConnectionId}

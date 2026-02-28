@@ -7,6 +7,7 @@ import { calculateImageSize } from "./rules";
 // --- Base Rules ---
 const BASE_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 const EXTENDED_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '9:21'];
+const BANANA2_RATIOS = [...EXTENDED_RATIOS, '1:4', '4:1', '1:8', '8:1'];
 
 // --- Model Specific Implementations ---
 
@@ -20,6 +21,13 @@ export const BananaProHandler = {
 
 export const BananaProEditHandler = {
     rules: { resolutions: ['1k', '2k', '4k'], ratios: EXTENDED_RATIOS, supportsEdit: true },
+    generate: async (cfg: ModelConfig, prompt: string, params: any) => {
+        return await generateBananaEdit(cfg, prompt, params.aspectRatio, params.resolution, params.inputImages);
+    }
+};
+
+export const Banana2Handler = {
+    rules: { resolutions: ['1k', '2k', '4k'], ratios: BANANA2_RATIOS, supportsEdit: true },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
         return await generateBananaEdit(cfg, prompt, params.aspectRatio, params.resolution, params.inputImages);
     }
@@ -42,20 +50,20 @@ export const Flux2Handler = {
 };
 
 export const Jimeng45Handler = {
-    rules: { resolutions: ['1k', '2k', '4k'], ratios: BASE_RATIOS },
+    rules: { resolutions: ['2k', '4k'], ratios: BASE_RATIOS },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
-        // Updated to Jmeng 4.5
-        const size = calculateImageSize(params.aspectRatio, params.resolution, 'Jmeng 4.5');
-        return await generateStandardImage(cfg, { id: 'doubao', name: 'Doubao', type: 'IMAGE_GEN' } as any, prompt, params.aspectRatio, params.resolution, size, params.inputImages, params.count, params.promptOptimize);
+        const effectiveResolution = params.resolution === '4k' ? '4k' : '2k';
+        const size = calculateImageSize(params.aspectRatio, effectiveResolution, 'Jmeng 4.5');
+        return await generateStandardImage(cfg, { id: 'doubao', name: 'Doubao', type: 'IMAGE_GEN' } as any, prompt, params.aspectRatio, effectiveResolution, size, params.inputImages, params.count, params.promptOptimize);
     }
 };
 
 export const Jimeng4Handler = {
-    rules: { resolutions: ['1k'], ratios: BASE_RATIOS },
+    rules: { resolutions: ['2k', '4k'], ratios: BASE_RATIOS },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
-        // Updated to Jmeng 4
-        const size = calculateImageSize(params.aspectRatio, '1k', 'Jmeng 4');
-        return await generateStandardImage(cfg, { id: 'doubao', name: 'Doubao', type: 'IMAGE_GEN' } as any, prompt, params.aspectRatio, '1k', size, params.inputImages, params.count, params.promptOptimize);
+        const effectiveResolution = params.resolution === '4k' ? '4k' : '2k';
+        const size = calculateImageSize(params.aspectRatio, effectiveResolution, 'Jmeng 4');
+        return await generateStandardImage(cfg, { id: 'doubao', name: 'Doubao', type: 'IMAGE_GEN' } as any, prompt, params.aspectRatio, effectiveResolution, size, params.inputImages, params.count, params.promptOptimize);
     }
 };
 
@@ -85,7 +93,7 @@ export const QwenEditHandler = {
 export const IMAGE_HANDLERS: Record<string, any> = {
     'BananaPro': BananaProHandler,
     'Banana Pro Edit': BananaProEditHandler,
-    'Banana 2': BananaProEditHandler,
+    'Banana 2': Banana2Handler,
     'Banana': BananaHandler,
     'Flux2': Flux2Handler,
     'Jmeng 4.5': Jimeng45Handler,

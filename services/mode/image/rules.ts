@@ -6,11 +6,11 @@ const DEFAULT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 export const IMAGE_MODEL_CAPABILITIES: Record<string, ImageModelRules> = {
     'BananaPro': { resolutions: ['1k', '2k', '4k'], ratios: DEFAULT_RATIOS },
     'Banana Pro Edit': { resolutions: ['1k', '2k', '4k'], ratios: ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '9:21'], supportsEdit: true },
-    'Banana 2': { resolutions: ['1k', '2k', '4k'], ratios: ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '9:21'], supportsEdit: true },
+    'Banana 2': { resolutions: ['1k', '2k', '4k'], ratios: ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '9:21', '1:4', '4:1', '1:8', '8:1'], supportsEdit: true },
     'Banana': { resolutions: ['1k'], ratios: DEFAULT_RATIOS },
     'Flux2': { resolutions: ['1k', '2k'], ratios: DEFAULT_RATIOS },
-    'Jmeng 4.5': { resolutions: ['1k', '2k', '4k'], ratios: DEFAULT_RATIOS },
-    'Jmeng 4': { resolutions: ['1k'], ratios: DEFAULT_RATIOS },
+    'Jmeng 4.5': { resolutions: ['2k', '4k'], ratios: DEFAULT_RATIOS },
+    'Jmeng 4': { resolutions: ['2k', '4k'], ratios: DEFAULT_RATIOS },
     'Midjourney': { resolutions: ['1k'], ratios: DEFAULT_RATIOS },
     'Zimage': { resolutions: ['1k'], ratios: DEFAULT_RATIOS, hasPromptExtend: true },
     'Qwenedit': { resolutions: ['1k'], ratios: DEFAULT_RATIOS }
@@ -71,14 +71,13 @@ export const calculateImageSize = (aspectRatio: string, resolution: string, mode
       }
   }
 
-  const supportsHighRes = ['BananaPro', 'Banana Pro Edit', 'Jmeng 4.5'].includes(modelName);
+  const supportsHighRes = ['BananaPro', 'Banana Pro Edit', 'Jmeng 4.5', 'Jmeng 4'].includes(modelName);
 
   if (supportsHighRes) {
       // Special handling for Jmeng models
-      if (modelName === 'Jmeng 4.5') {
-          let longEdge = 1920; // Default 1k
-          if (resolution === '2k') longEdge = 2560;
-          else if (resolution === '4k') longEdge = 4096;
+      if (modelName === 'Jmeng 4.5' || modelName === 'Jmeng 4') {
+          let longEdge = 2560;
+          if (resolution === '4k') longEdge = 4096;
 
           // Calculate dimensions based on aspect ratio with long edge constraint
           if (w >= h) {
