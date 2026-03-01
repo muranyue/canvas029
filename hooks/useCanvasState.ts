@@ -207,7 +207,7 @@ export const useCanvasState = () => {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [showMinimap, setShowMinimap] = useState(true);
     const [showColorPicker, setShowColorPicker] = useState(false);
-    const [nextGroupColor, setNextGroupColor] = useState('#E0E2E8');
+    const [nextGroupColor, setNextGroupColor] = useState('#F8C8DC');
 
     // Temp connection state
     const [tempConnection, setTempConnection] = useState<Point | null>(null);

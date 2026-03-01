@@ -229,7 +229,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                     >
                         <Icons.Maximize2 size={16} />
                     </button>
-                    <input type="range" min="0.4" max="2" step="0.1" value={transform.k} onChange={handleZoom} className="w-20 h-1 accent-cyan-500 cursor-pointer" style={{ touchAction: 'auto' }} />
+                    <input type="range" min="0.2" max="2" step="0.1" value={transform.k} onChange={handleZoom} className="w-20 h-1 accent-cyan-500 cursor-pointer" style={{ touchAction: 'auto' }} />
                     <span className={`text-xs font-mono w-8 text-right ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{Math.round(transform.k * 100)}%</span>
                 </div>
 

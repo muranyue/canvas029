@@ -256,7 +256,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         const zoomIntensity = 0.1;
         const direction = e.deltaY > 0 ? -1 : 1;
         let newK = transform.k + direction * zoomIntensity;
-        newK = Math.min(Math.max(0.4, newK), 2);
+        newK = Math.min(Math.max(0.2, newK), 2);
         const rect = containerRef.current!.getBoundingClientRect();
         const worldX = (e.clientX - rect.left - transform.x) / transform.k;
         const worldY = (e.clientY - rect.top - transform.y) / transform.k;
@@ -325,7 +325,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             if (touchStartRef.current.dist > 0) {
                 const scale = dist / touchStartRef.current.dist;
                 let newK = initialTransformRef.current.k * scale;
-                newK = Math.min(Math.max(0.4, newK), 2.5);
+                newK = Math.min(Math.max(0.2, newK), 2.5);
                 const rect = containerRef.current!.getBoundingClientRect();
                 const cx = touchStartRef.current.centerX - rect.left;
                 const cy = touchStartRef.current.centerY - rect.top;

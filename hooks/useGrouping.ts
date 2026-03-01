@@ -3,15 +3,14 @@ import { NodeData, NodeType } from '../types';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-// Morandi-ish Colored Grays
 export const GROUP_COLORS = [
-    '#E2E5E8',
-    '#E8E5E2',
-    '#D9D5D0',
-    '#C8C5C1',
-    '#E0E2E8',
-    '#E6E3DD',
-    '#E3E8E6',
+    '#F8C8DC',
+    '#97D2D8',
+    '#B5D99C',
+    '#FFB7B2',
+    '#DAC6F7',
+    '#A2D5F2',
+    '#FFC3A0',
 ];
 
 interface UseGroupingProps {

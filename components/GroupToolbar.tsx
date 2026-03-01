@@ -20,7 +20,11 @@ export const GroupToolbar: React.FC<GroupToolbarProps> = ({
 }) => {
     return (
         <div className="absolute z-[150] flex flex-col items-center pointer-events-none" style={{ left: position.x, top: position.y - 60, transform: 'translateX(-50%)' }}>
-            <div className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`}>
+            <div
+                className={`pointer-events-auto flex items-center p-1.5 rounded-xl shadow-xl backdrop-blur-md border animate-in fade-in zoom-in-95 duration-200 relative ${isDark ? 'bg-[#1A1D21]/90 border-zinc-700' : 'bg-white/90 border-gray-200'}`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+            >
                 <div className="relative border-r border-gray-500/20 pr-1.5 mr-1.5">
                     <button
                         className={`w-6 h-6 rounded-md border flex items-center justify-center transition-transform hover:scale-105 ${isDark ? 'border-white/10' : 'border-black/5'}`}

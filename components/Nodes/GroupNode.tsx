@@ -14,7 +14,7 @@ export const GroupNode: React.FC<GroupNodeProps> = ({
   data, updateData, selected, isDark = true 
 }) => {
     // Select the group color from data, falling back to theme-specific defaults.
-    const groupColor = data.color || (isDark ? '#27272a' : '#E2E5E8');
+    const groupColor = data.color || (isDark ? '#27272a' : '#F8C8DC');
     
     return (
         <div className="w-full h-full flex flex-col relative">
