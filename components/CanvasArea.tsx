@@ -53,6 +53,7 @@ interface CanvasAreaProps {
     handleMouseUp: (e: React.MouseEvent) => void;
     handleWheel: (e: React.WheelEvent) => void;
     handleCanvasContextMenu: (e: React.MouseEvent) => void;
+    handleCanvasDoubleClick: (e: React.MouseEvent) => void;
     handleDragOver: (e: React.DragEvent) => void;
     handleDrop: (e: React.DragEvent) => void;
     handleTouchStart: (e: React.TouchEvent) => void;
@@ -85,7 +86,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
     removeConnection, setShowMinimap,
     handleGroupSelection, handleUngroup, handleGroupColorChange, getSelectionCenter,
     handleMouseDown, handleMouseMove, handleMouseUp, handleWheel,
-    handleCanvasContextMenu, handleDragOver, handleDrop,
+    handleCanvasContextMenu, handleCanvasDoubleClick, handleDragOver, handleDrop,
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleNodeMouseDown, handleNodeTouchStart, handleNodeTouchEnd, handleNodeClick,
     handleNodeContextMenu, handleResizeStart, handleConnectStart, handleConnectTouchStart, handlePortMouseUp,
@@ -107,6 +108,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             onMouseUp={handleMouseUp}
             onWheel={handleWheel}
             onContextMenu={handleCanvasContextMenu}
+            onDoubleClick={handleCanvasDoubleClick}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onTouchStart={handleTouchStart}

@@ -49,6 +49,7 @@ const CanvasWithSidebar: React.FC = () => {
         quickAddMenu, setQuickAddMenu, showNewWorkflowDialog, setShowNewWorkflowDialog,
         isSettingsOpen, setIsSettingsOpen, showMinimap,
         showColorPicker, setShowColorPicker, nextGroupColor, setNextGroupColor,
+        desktopPlatform, setDesktopPlatform,
         tempConnection, setTempConnection, suggestedNodes, setSuggestedNodes,
         isDark, screenToWorld, updateNodeData,
     } = canvasState;
@@ -77,6 +78,7 @@ const CanvasWithSidebar: React.FC = () => {
 
     const { spacePressed } = useKeyboardShortcuts({
         nodes, setNodes, connections, setConnections,
+        viewportSize, setTransform,
         selectedNodeIds, setSelectedNodeIds, selectedConnectionId, setSelectedConnectionId,
         deletedNodes, setDeletedNodes, previewMedia, setPreviewMedia,
         contextMenu, setContextMenu, quickAddMenu, setQuickAddMenu,
@@ -98,7 +100,7 @@ const CanvasWithSidebar: React.FC = () => {
         },
         state: {
             nodes, connections, transform, selectedNodeIds, selectedConnectionId, dragMode,
-            contextMenu, quickAddMenu, showColorPicker,
+            contextMenu, quickAddMenu, showColorPicker, desktopPlatform,
             setNodes, setConnections, setTransform, setDeletedNodes,
             setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
             setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
@@ -149,6 +151,8 @@ const CanvasWithSidebar: React.FC = () => {
                 onImportAsset={() => assetInputRef.current?.click()}
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onUpdateCanvasBg={setCanvasBg}
+                desktopPlatform={desktopPlatform}
+                onToggleDesktopPlatform={() => setDesktopPlatform(prev => prev === 'WIN' ? 'MAC' : 'WIN')}
                 nodes={[...nodes, ...deletedNodes]}
                 onPreviewMedia={handlers.handleHistoryPreview}
                 isDark={isDark}
@@ -197,6 +201,7 @@ const CanvasWithSidebar: React.FC = () => {
                 handleMouseUp={handlers.handleMouseUp}
                 handleWheel={handlers.handleWheel}
                 handleCanvasContextMenu={handlers.handleCanvasContextMenu}
+                handleCanvasDoubleClick={handlers.handleCanvasDoubleClick}
                 handleDragOver={handlers.handleDragOver}
                 handleDrop={handlers.handleDrop}
                 handleTouchStart={handlers.handleTouchStart}

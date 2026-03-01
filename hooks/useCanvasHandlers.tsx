@@ -27,6 +27,7 @@ interface CanvasStateSetters {
     contextMenu: any;
     quickAddMenu: any;
     showColorPicker: boolean;
+    desktopPlatform: 'WIN' | 'MAC';
     setNodes: (value: NodeData[] | ((prev: NodeData[]) => NodeData[])) => void;
     setConnections: (value: Connection[] | ((prev: Connection[]) => Connection[])) => void;
     setTransform: (value: CanvasTransform | ((prev: CanvasTransform) => CanvasTransform)) => void;
@@ -69,7 +70,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     const {
         nodes, connections, transform, selectedNodeIds, selectedConnectionId, dragMode,
-        contextMenu, quickAddMenu, showColorPicker,
+        contextMenu, quickAddMenu, showColorPicker, desktopPlatform,
         setNodes, setConnections, setTransform, setDeletedNodes,
         setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
         setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
@@ -372,6 +373,13 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (selectedConnectionId) setSelectedConnectionId(null);
         if (showColorPicker) setShowColorPicker(false);
 
+        if (desktopPlatform === 'MAC' && e.button === 2 && e.target === containerRef.current) {
+            setDragMode('PAN');
+            dragStartRef.current = { x: e.clientX, y: e.clientY };
+            initialTransformRef.current = { ...transform };
+            e.preventDefault(); return;
+        }
+
         if (e.button === 1 || (e.button === 0 && spacePressed.current)) {
             setDragMode('PAN');
             dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -384,7 +392,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             setSelectionBox({ x: 0, y: 0, w: 0, h: 0 });
             if (!e.shiftKey) setSelectedNodeIds(new Set());
         }
-    }, [contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef]);
+    }, [contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, desktopPlatform, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef]);
 
     const handleMouseMove = useCallback((e: any) => {
         lastMousePosRef.current = { x: e.clientX, y: e.clientY };
@@ -591,9 +599,18 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     const handleCanvasContextMenu = useCallback((e: any) => {
         e.preventDefault();
+        if (desktopPlatform === 'MAC') return;
         const worldPos = screenToWorld(e.clientX, e.clientY);
         setContextMenu({ type: 'CANVAS', x: e.clientX, y: e.clientY, worldX: worldPos.x, worldY: worldPos.y });
-    }, [screenToWorld, setContextMenu]);
+    }, [desktopPlatform, screenToWorld, setContextMenu]);
+
+    const handleCanvasDoubleClick = useCallback((e: any) => {
+        if (desktopPlatform !== 'MAC') return;
+        if (e.target !== containerRef.current) return;
+        e.preventDefault();
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        setContextMenu({ type: 'CANVAS', x: e.clientX, y: e.clientY, worldX: worldPos.x, worldY: worldPos.y });
+    }, [desktopPlatform, screenToWorld, setContextMenu, containerRef]);
 
     // ========== Connection Events ==========
     const handleResizeStart = useCallback((e: any, nodeId: string, direction: string = 'SE') => {
@@ -646,7 +663,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         handleMouseDown, handleMouseMove, handleMouseUp,
         // Node
         handleNodeMouseDown, handleNodeTouchStart, handleNodeTouchEnd, handleNodeClick,
-        handleNodeContextMenu, handleCanvasContextMenu,
+        handleNodeContextMenu, handleCanvasContextMenu, handleCanvasDoubleClick,
         // Connection
         handleResizeStart, handleConnectStart, handleConnectTouchStart, handlePortMouseUp,
         // Quick Add

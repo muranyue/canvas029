@@ -208,6 +208,10 @@ export const useCanvasState = () => {
     const [showMinimap, setShowMinimap] = useState(true);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [nextGroupColor, setNextGroupColor] = useState('#F8C8DC');
+    const [desktopPlatform, setDesktopPlatform] = useState<'WIN' | 'MAC'>(() => {
+        const stored = loadState<'WIN' | 'MAC'>('canvas_desktop_platform', 'WIN');
+        return stored === 'MAC' ? 'MAC' : 'WIN';
+    });
 
     // Temp connection state
     const [tempConnection, setTempConnection] = useState<Point | null>(null);
@@ -370,6 +374,14 @@ export const useCanvasState = () => {
         setShowColorPicker(false);
     }, [selectedNodeIds]);
 
+    useEffect(() => {
+        try {
+            localStorage.setItem('canvas_desktop_platform', JSON.stringify(desktopPlatform));
+        } catch (e) {
+            console.warn('Failed to persist desktop platform setting', e);
+        }
+    }, [desktopPlatform]);
+
     // Screen to world coordinate conversion
     const screenToWorld = useCallback((x: number, y: number) => ({
         x: (x - transform.x) / transform.k,
@@ -467,6 +479,7 @@ export const useCanvasState = () => {
         showMinimap, setShowMinimap,
         showColorPicker, setShowColorPicker,
         nextGroupColor, setNextGroupColor,
+        desktopPlatform, setDesktopPlatform,
         
         // Temp connection
         tempConnection, setTempConnection,

@@ -11,6 +11,8 @@ interface SidebarProps {
   onImportAsset: () => void;
   onOpenSettings: (tab: string) => void;
   onUpdateCanvasBg: (color: string) => void;
+  desktopPlatform: 'WIN' | 'MAC';
+  onToggleDesktopPlatform: () => void;
   nodes: NodeData[];
   onPreviewMedia: (url: string, type: 'image' | 'video') => void;
   isDark?: boolean;
@@ -64,6 +66,19 @@ const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'imag
            (prev.node.outputArtifacts?.length || 0) === (next.node.outputArtifacts?.length || 0);
 });
 
+const WindowsLogoIcon = ({ size = 18 }: { size?: number }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M2.8 4.2l8.2-1.1v8.7H2.8V4.2zm9.6-1.3L21.2 1.7v10.1h-8.8V2.9zM2.8 12.9H11v8.8l-8.2-1.1v-7.7zm9.6 0h8.8v10.1l-8.8-1.2v-8.9z" />
+    </svg>
+);
+
+const AppleLogoIcon = ({ size = 18 }: { size?: number }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M16.38 12.37c-.02-2.2 1.8-3.25 1.88-3.3-1.03-1.5-2.63-1.7-3.2-1.72-1.35-.14-2.65.8-3.33.8-.7 0-1.74-.78-2.86-.76-1.47.02-2.82.86-3.58 2.2-1.53 2.66-.39 6.58 1.1 8.72.73 1.05 1.6 2.23 2.74 2.19 1.09-.04 1.5-.7 2.82-.7 1.31 0 1.69.7 2.84.67 1.18-.02 1.92-1.06 2.64-2.12.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.26-.87-2.28-3.52z" />
+        <path d="M14.72 6.3c.6-.73 1-1.74.89-2.75-.86.03-1.9.57-2.52 1.3-.55.64-1.03 1.67-.9 2.65.95.07 1.93-.48 2.53-1.2z" />
+    </svg>
+);
+
 const Sidebar: React.FC<SidebarProps> = ({ 
   onAddNode, 
   onSaveWorkflow, 
@@ -72,6 +87,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   onImportAsset,
   onOpenSettings,
   onUpdateCanvasBg,
+  desktopPlatform,
+  onToggleDesktopPlatform,
   nodes,
   onPreviewMedia,
   isDark = true
@@ -296,6 +313,23 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" />
                 <div className={`w-full h-px my-2 ${dividerColor}`} />
                 <SidebarItem icon={Icons.Settings} category="SETTINGS" tooltip="Settings" />
+                <div
+                    className={`relative flex items-center justify-center w-10 h-10 md:mt-2 rounded-xl cursor-pointer transition-all duration-200 group ${itemText} ${itemHover} ${isDark ? 'border border-zinc-700/60' : 'border border-gray-200'}`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleDesktopPlatform();
+                    }}
+                    onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onToggleDesktopPlatform();
+                    }}
+                >
+                    {desktopPlatform === 'MAC' ? <AppleLogoIcon size={18} /> : <WindowsLogoIcon size={18} />}
+                    <div className={`hidden md:block absolute left-full ml-3 px-2 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border shadow-xl text-xs ${isDark ? 'bg-zinc-900 text-gray-200 border-zinc-700' : 'bg-white text-gray-800 border-gray-200'}`}>
+                        {desktopPlatform === 'MAC' ? 'Mac Mode' : 'Win Mode'}
+                    </div>
+                </div>
             </div>
 
             <div className="relative">
