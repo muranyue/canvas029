@@ -44,8 +44,8 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
 
   // --- Video Models ---
   'Sora 2': { id: 'sora-2-all', name: 'Sora 2', type: 'VIDEO_GEN_FORM', category: 'VIDEO', defaultEndpoint: '/v1/video/create', defaultQueryEndpoint: '/v1/video/query' },
-  'Veo 3.1 Fast': { id: 'veo3.1', name: 'Veo 3.1 Fast', type: 'VIDEO_GEN_STD', category: 'VIDEO', defaultEndpoint: '/v1/video/create', defaultQueryEndpoint: '/v1/video/query' },
-  'Veo 3.1 Pro': { id: 'veo3.1-pro', name: 'Veo 3.1 Pro', type: 'VIDEO_GEN_STD', category: 'VIDEO', defaultEndpoint: '/v1/video/create', defaultQueryEndpoint: '/v1/video/query' },
+  'Veo 3.1 Fast': { id: 'veo_3_1-fast', name: 'Veo 3.1 Fast', type: 'VIDEO_GEN_STD', category: 'VIDEO', defaultEndpoint: '/v1/videos', defaultQueryEndpoint: '/v1/videos/{id}' },
+  'Veo 3.1 Pro': { id: 'veo_3_1', name: 'Veo 3.1 Pro', type: 'VIDEO_GEN_STD', category: 'VIDEO', defaultEndpoint: '/v1/videos', defaultQueryEndpoint: '/v1/videos/{id}' },
   'Hailuo 2.0': { 
       id: 'MiniMax-Hailuo-02', 
       name: 'Hailuo 2.0', 

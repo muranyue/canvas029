@@ -74,6 +74,7 @@ export const fetchThirdParty = async (url: string, method: string, body: any, co
             const error: any = new Error(`API Error ${response.status}: ${details.join(' ')}`);
             if (errType) error.name = String(errType);
             if (errCode) error.code = errCode;
+            error.status = response.status;
             if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) {
                 error.isNonRetryable = true;
             }

@@ -19,10 +19,35 @@ interface SidebarProps {
 }
 
 type MenuCategory = 'ADD' | 'WORKFLOW' | 'HISTORY' | 'ASSETS' | 'SETTINGS' | null;
+type MenuAnchorCategory = Exclude<MenuCategory, null | 'SETTINGS'>;
 
-const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'image' | 'video', onClick: () => void }) => {
-    const stackCount = node.outputArtifacts?.length || 0;
-    
+interface HistoryNodeEntry {
+    key: string;
+    nodeId: string;
+    primarySrc: string;
+    sources: string[];
+    type: 'image' | 'video';
+    title: string;
+    resolution?: string;
+}
+
+const collectHistorySources = (currentSrc?: string, artifacts?: string[]) => {
+    const seen = new Set<string>();
+    const ordered = [...(currentSrc ? [currentSrc] : []), ...(artifacts || [])];
+    const result: string[] = [];
+
+    ordered.forEach((src) => {
+        if (!src || seen.has(src)) return;
+        seen.add(src);
+        result.push(src);
+    });
+
+    return result;
+};
+
+const HistoryItem = memo(({ entry, isExpanded, onClick }: { entry: HistoryNodeEntry, isExpanded: boolean, onClick: () => void }) => {
+    const stackCount = entry.sources.length;
+
     return (
         <div 
            className="relative aspect-square rounded-lg overflow-hidden border border-zinc-800 cursor-pointer group bg-black"
@@ -33,11 +58,11 @@ const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'imag
                onClick();
            }}
         >
-            {type === 'image' ? (
-                <img src={node.imageSrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" decoding="async"/>
+            {entry.type === 'image' ? (
+                <img src={entry.primarySrc} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" loading="lazy" decoding="async"/>
             ) : (
                 <div className="w-full h-full relative bg-black">
-                   <video src={node.videoSrc} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" muted preload="metadata" />
+                   <video src={entry.primarySrc} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" muted preload="metadata" />
                    <div className="absolute inset-0 flex items-center justify-center">
                        <Icons.Play size={16} className="text-white opacity-50 group-hover:opacity-100 drop-shadow-md"/>
                    </div>
@@ -45,25 +70,26 @@ const HistoryItem = memo(({ node, type, onClick }: { node: NodeData, type: 'imag
             )}
             
             {stackCount > 1 && (
-                <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md text-white text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5 border border-white/10 z-10 shadow-sm">
+                <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-md text-white text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-1 border border-white/10 z-10 shadow-sm">
                     <Icons.Layers size={8} className="text-cyan-400" />
                     <span className="font-bold">{stackCount}</span>
+                    <Icons.ChevronRight size={8} className={`transition-transform ${isExpanded ? 'rotate-90 text-white' : 'text-zinc-400'}`} />
                 </div>
             )}
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-2">
-                <div className="text-[9px] text-white truncate font-medium">{node.title}</div>
-                <div className="text-[8px] text-zinc-400 truncate">{node.resolution || '1024x1024'}</div>
+                <div className="text-[9px] text-white truncate font-medium">{entry.title}</div>
+                <div className="text-[8px] text-zinc-400 truncate">{entry.resolution || '1024x1024'}</div>
             </div>
         </div>
     );
 }, (prev, next) => {
-    return prev.type === next.type && 
-           prev.node.id === next.node.id && 
-           prev.node.imageSrc === next.node.imageSrc && 
-           prev.node.videoSrc === next.node.videoSrc &&
-           prev.node.title === next.node.title &&
-           (prev.node.outputArtifacts?.length || 0) === (next.node.outputArtifacts?.length || 0);
+    return prev.entry.key === next.entry.key &&
+           prev.entry.primarySrc === next.entry.primarySrc &&
+           prev.entry.title === next.entry.title &&
+           prev.entry.resolution === next.entry.resolution &&
+           prev.entry.sources.length === next.entry.sources.length &&
+           prev.isExpanded === next.isExpanded;
 });
 
 const WindowsLogoIcon = ({ size = 18 }: { size?: number }) => (
@@ -95,7 +121,12 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [activeMenu, setActiveMenu] = useState<MenuCategory>(null);
   const [historyTab, setHistoryTab] = useState<'IMAGES' | 'VIDEOS'>('IMAGES');
+  const [expandedHistoryKey, setExpandedHistoryKey] = useState<string | null>(null);
+  const [isDesktopView, setIsDesktopView] = useState(() => window.innerWidth >= 768);
+  const [desktopSubMenuTop, setDesktopSubMenuTop] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  const desktopSidebarRef = useRef<HTMLDivElement>(null);
+  const menuItemRefs = useRef<Partial<Record<MenuAnchorCategory, HTMLDivElement | null>>>({});
 
   // Deduplicate nodes for history display
   const uniqueNodes = useMemo(() => {
@@ -116,6 +147,35 @@ const Sidebar: React.FC<SidebarProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktopView(window.innerWidth >= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktopView || !activeMenu || activeMenu === 'SETTINGS') return;
+    const anchor = menuItemRefs.current[activeMenu];
+    const sidebar = desktopSidebarRef.current;
+    if (!anchor || !sidebar) return;
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const sidebarRect = sidebar.getBoundingClientRect();
+    setDesktopSubMenuTop(anchorRect.top + anchorRect.height / 2 - sidebarRect.top);
+  }, [activeMenu, isDesktopView]);
+
+  useEffect(() => {
+    if (activeMenu !== 'HISTORY') {
+      setExpandedHistoryKey(null);
+    }
+  }, [activeMenu]);
+
+  useEffect(() => {
+    setExpandedHistoryKey(null);
+  }, [historyTab]);
 
   const toggleMenu = (category: MenuCategory) => {
     if (category === 'SETTINGS') {
@@ -138,13 +198,19 @@ const Sidebar: React.FC<SidebarProps> = ({
   const SidebarItem = ({ 
     icon: Icon, 
     category, 
-    tooltip 
+    tooltip,
+    trackAnchor = false,
   }: { 
     icon: any, 
     category: MenuCategory, 
-    tooltip: string 
+    tooltip: string,
+    trackAnchor?: boolean,
   }) => (
     <div 
+        ref={(el) => {
+          if (!trackAnchor || !category || category === 'SETTINGS') return;
+          menuItemRefs.current[category as MenuAnchorCategory] = el;
+        }}
         className={`relative flex items-center justify-center w-10 h-10 md:mb-3 rounded-xl cursor-pointer transition-all duration-200 group
           ${activeMenu === category ? itemActive : itemText + ' ' + itemHover}
         `}
@@ -209,10 +275,44 @@ const Sidebar: React.FC<SidebarProps> = ({
   );
 
   const renderHistoryContent = () => {
-    const imageNodes = uniqueNodes.filter(n => n.imageSrc && !n.isLoading && (n.type === NodeType.TEXT_TO_IMAGE || n.type === NodeType.ORIGINAL_IMAGE));
-    const videoNodes = uniqueNodes.filter(n => n.videoSrc && !n.isLoading && n.type === NodeType.TEXT_TO_VIDEO);
+    const imageEntries: HistoryNodeEntry[] = uniqueNodes.flatMap((node) => {
+        if (node.isLoading) return [];
+        if (node.type !== NodeType.TEXT_TO_IMAGE && node.type !== NodeType.ORIGINAL_IMAGE) return [];
 
-    const items = historyTab === 'IMAGES' ? imageNodes : videoNodes;
+        const sources = collectHistorySources(node.imageSrc, node.outputArtifacts);
+        if (sources.length === 0) return [];
+
+        return [{
+            key: `${node.id}-image`,
+            nodeId: node.id,
+            primarySrc: (node.imageSrc && sources.includes(node.imageSrc)) ? node.imageSrc : sources[0],
+            sources,
+            type: 'image' as const,
+            title: node.title,
+            resolution: node.resolution,
+        }];
+    });
+
+    const videoEntries: HistoryNodeEntry[] = uniqueNodes.flatMap((node) => {
+        if (node.isLoading) return [];
+        if (node.type !== NodeType.TEXT_TO_VIDEO) return [];
+
+        const sources = collectHistorySources(node.videoSrc, node.outputArtifacts);
+        if (sources.length === 0) return [];
+
+        return [{
+            key: `${node.id}-video`,
+            nodeId: node.id,
+            primarySrc: (node.videoSrc && sources.includes(node.videoSrc)) ? node.videoSrc : sources[0],
+            sources,
+            type: 'video' as const,
+            title: node.title,
+            resolution: node.resolution,
+        }];
+    });
+
+    const items = historyTab === 'IMAGES' ? imageEntries : videoEntries;
+    const expandedItem = items.find((item) => item.key === expandedHistoryKey) || null;
     const tabActive = isDark ? 'bg-zinc-700 text-white' : 'bg-white text-gray-900 shadow-sm border border-gray-200';
     const tabInactive = isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700';
 
@@ -229,15 +329,59 @@ const Sidebar: React.FC<SidebarProps> = ({
                          No generated {historyTab.toLowerCase()} yet.
                      </div>
                  )}
-                 {items.map(node => (
+                 {items.map((entry) => (
                      <HistoryItem 
-                        key={node.id} 
-                        node={node} 
-                        type={historyTab === 'IMAGES' ? 'image' : 'video'} 
-                        onClick={() => onPreviewMedia((historyTab === 'IMAGES' ? node.imageSrc : node.videoSrc) || '', historyTab === 'IMAGES' ? 'image' : 'video')}
+                        key={entry.key}
+                        entry={entry}
+                        isExpanded={expandedHistoryKey === entry.key}
+                        onClick={() => {
+                            if (entry.sources.length <= 1) {
+                                onPreviewMedia(entry.primarySrc, entry.type);
+                                return;
+                            }
+                            setExpandedHistoryKey(prev => prev === entry.key ? null : entry.key);
+                        }}
                      />
                  ))}
              </div>
+
+             {expandedItem && expandedItem.sources.length > 1 && (
+                 <div className={`rounded-lg border p-2 ${isDark ? 'bg-zinc-900/80 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+                     <div className={`text-[10px] font-bold mb-2 flex items-center justify-between ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                         <span className="truncate pr-2">{expandedItem.title}</span>
+                         <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{expandedItem.sources.length} items</span>
+                     </div>
+                     <div className="grid grid-cols-2 gap-2 max-h-[220px] md:max-h-[180px] overflow-y-auto custom-scrollbar pr-1">
+                         {expandedItem.sources.map((src, index) => {
+                             const isCurrent = src === expandedItem.primarySrc;
+                             return (
+                                 <button
+                                     key={`${expandedItem.key}-source-${index}`}
+                                     type="button"
+                                     className={`relative aspect-square rounded-md overflow-hidden border transition-colors ${isCurrent ? 'border-cyan-500' : (isDark ? 'border-zinc-700 hover:border-zinc-500' : 'border-gray-300 hover:border-gray-400')}`}
+                                     onClick={(e) => {
+                                         e.stopPropagation();
+                                         onPreviewMedia(src, expandedItem.type);
+                                     }}
+                                     onTouchEnd={(e) => {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         onPreviewMedia(src, expandedItem.type);
+                                     }}
+                                 >
+                                     {expandedItem.type === 'image' ? (
+                                         <img src={src} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                                     ) : (
+                                         <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
+                                     )}
+                                     <div className="absolute bottom-1 left-1 text-[8px] px-1 py-0.5 rounded bg-black/70 text-white font-bold">#{index + 1}</div>
+                                     {isCurrent && <div className="absolute top-1 right-1 text-[8px] px-1 py-0.5 rounded bg-cyan-500 text-white font-bold">Current</div>}
+                                 </button>
+                             );
+                         })}
+                     </div>
+                 </div>
+             )}
         </div>
     );
   };
@@ -284,16 +428,30 @@ const Sidebar: React.FC<SidebarProps> = ({
         break;
     }
 
+    const panel = (
+      <div className={`${menuBg} rounded-2xl p-3 flex flex-col gap-1 w-full md:w-64 animate-in fade-in slide-in-from-bottom-4 md:slide-in-from-left-2 shadow-2xl border max-h-[60vh] md:max-h-none overflow-y-auto`}>
+        <div className={`px-2 py-1 mb-2 border-b text-[10px] font-bold uppercase tracking-wider ${titleColor}`}>
+          {title}
+        </div>
+        {content}
+      </div>
+    );
+
+    if (isDesktopView) {
+      const shouldCenterAlign = activeMenu === 'WORKFLOW' || activeMenu === 'ASSETS';
+      return (
+        <div
+          className="absolute z-40 left-3 w-64"
+          style={shouldCenterAlign ? { top: desktopSubMenuTop, transform: 'translateY(-50%)' } : { top: 0 }}
+        >
+          {panel}
+        </div>
+      );
+    }
+
     return (
-      <div className={`absolute z-40 flex items-start 
-          md:left-3 md:top-0 md:bottom-auto md:w-auto 
-          fixed bottom-20 left-4 right-4 md:static`}>
-          <div className={`${menuBg} rounded-2xl p-3 flex flex-col gap-1 w-full md:w-64 animate-in fade-in slide-in-from-bottom-4 md:slide-in-from-left-2 shadow-2xl border max-h-[60vh] md:max-h-none overflow-y-auto`}>
-            <div className={`px-2 py-1 mb-2 border-b text-[10px] font-bold uppercase tracking-wider ${titleColor}`}>
-              {title}
-            </div>
-            {content}
-          </div>
+      <div className="fixed z-40 bottom-20 left-4 right-4">
+        {panel}
       </div>
     );
   };
@@ -301,16 +459,16 @@ const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div ref={menuRef}>
         {/* Desktop Sidebar */}
-        <div className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-[200] items-start">
+        <div ref={desktopSidebarRef} className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-[200] items-start">
             {/* Main Bar */}
             <div className={`${sidebarBg} backdrop-blur-md shadow-2xl border rounded-2xl p-2 flex flex-col items-center`}>
                 <div className={`w-8 h-1 rounded-full mb-4 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`}></div>
                 
-                <SidebarItem icon={Icons.Plus} category="ADD" tooltip="Add Node" />
+                <SidebarItem icon={Icons.Plus} category="ADD" tooltip="Add Node" trackAnchor />
                 <div className={`w-full h-px my-2 ${dividerColor}`} />
-                <SidebarItem icon={Icons.Folder} category="WORKFLOW" tooltip="Workflow" />
-                <SidebarItem icon={Icons.Clock} category="HISTORY" tooltip="History" />
-                <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" />
+                <SidebarItem icon={Icons.Folder} category="WORKFLOW" tooltip="Workflow" trackAnchor />
+                <SidebarItem icon={Icons.Clock} category="HISTORY" tooltip="History" trackAnchor />
+                <SidebarItem icon={Icons.Image} category="ASSETS" tooltip="Assets" trackAnchor />
                 <div className={`w-full h-px my-2 ${dividerColor}`} />
                 <SidebarItem icon={Icons.Settings} category="SETTINGS" tooltip="Settings" />
                 <div

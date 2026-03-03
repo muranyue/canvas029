@@ -296,16 +296,19 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
 }) => {
     const stackRef = useRef<HTMLDivElement>(null);
     const artifacts = data.outputArtifacts || [];
-    const sortedArtifacts = currentSrc ? [currentSrc, ...artifacts.filter(a => a !== currentSrc)] : artifacts;
-    const showBadge = !data.isStackOpen && artifacts.length > 1;
+    const seenArtifacts = new Set<string>();
+    const sortedArtifacts = (currentSrc ? [currentSrc, ...artifacts] : artifacts).filter((src) => {
+        if (!src || seenArtifacts.has(src)) return false;
+        seenArtifacts.add(src);
+        return true;
+    });
+    const showBadge = !data.isStackOpen && sortedArtifacts.length > 1;
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => { if (data.isStackOpen && stackRef.current && !stackRef.current.contains(event.target as Node)) updateData(data.id, { isStackOpen: false }); };
         if (data.isStackOpen) document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [data.isStackOpen, data.id, updateData]);
-
-    useEffect(() => { if (!selected && data.isStackOpen) updateData(data.id, { isStackOpen: false }); }, [selected, data.isStackOpen, data.id, updateData]);
 
     if (data.isStackOpen) {
         return (
@@ -343,7 +346,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
            ) : (
                currentSrc && <img src={currentSrc} className={`w-full h-full object-contain pointer-events-none ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} alt="Generated" draggable={false} />
            )}
-           {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} data-interactive="true"><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{artifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
+           {showBadge && <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} data-interactive="true"><Icons.Layers size={10} className="text-cyan-400"/><span className="font-bold tabular-nums">{sortedArtifacts.length}</span><Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" /></div>}
         </>
     );
 };

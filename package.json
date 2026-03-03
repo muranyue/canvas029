@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:temp-log": "./scripts/dev-temp-log.sh",
     "build": "vite build",
     "preview": "vite preview"
   },

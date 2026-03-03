@@ -65,17 +65,14 @@ export const generateVideo = async (
     resolution: string = "720p", 
     duration: string = "5s",
     count: number = 1,
-    promptOptimize: boolean = false
+    promptOptimize: boolean = false,
+    isStartEndMode: boolean = false
 ): Promise<string[]> => {
-    let realModelName = modelName;
-    const isStartEndMode = modelName.endsWith('_FL');
-    if (isStartEndMode) realModelName = modelName.replace('_FL', '');
-
-    let handler = VIDEO_HANDLERS[realModelName];
+    let handler = VIDEO_HANDLERS[modelName];
     
     // Fallback for custom models
     if (!handler) {
-        const def = MODEL_REGISTRY[realModelName];
+        const def = MODEL_REGISTRY[modelName];
         if (def) {
             if (def.type === 'VIDEO_GEN_FORM') handler = Sora2Handler;
             else handler = KlingStandardHandler; // Default to Generic Video Gen
@@ -84,7 +81,7 @@ export const generateVideo = async (
 
     if (!handler) handler = VIDEO_HANDLERS['Sora2'];
 
-    const config = getModelConfig(realModelName);
+    const config = getModelConfig(modelName);
     
     try {
         const result = await handler.generate(config, prompt, { 

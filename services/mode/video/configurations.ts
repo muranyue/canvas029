@@ -33,49 +33,33 @@ export const Sora2Handler = {
 };
 
 export const VeoFastHandler = {
-    rules: { resolutions: ['720p', '1080p'], durations: ['8s'], ratios: ['16:9', '9:16'], maxInputImages: 3 },
+    rules: { resolutions: ['720p', '4k'], durations: ['8s'], ratios: ['16:9', '9:16'], maxInputImages: 2 },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
-        let modelId = 'veo3.1'; // Default Text-to-Video (Fast Mode)
-        let images = params.inputImages || [];
-
-        // Logic for Veo 3.1 Fast:
-        // Text-to-Video -> veo3.1
-        // Image-to-Video -> veo3.1-fast-components
-        
-        if (images.length > 0) {
-             modelId = 'veo3.1-fast-components';
-        }
-
-        // Enforce max 3 images
-        if (images.length > 3) {
-            images = images.slice(0, 3);
-        }
-
-        const newCfg = { ...cfg, modelId, endpoint: '/v1/video/create' };
-        return await generateVeo3Video(newCfg, prompt, params.aspectRatio, images, params.promptOptimize);
+        const isStartEndMode = !!params.isStartEndMode;
+        const rawImages = params.inputImages || [];
+        const images = isStartEndMode
+            ? (rawImages.length > 1 ? [rawImages[0], rawImages[rawImages.length - 1]] : rawImages.slice(0, 1))
+            : rawImages.slice(0, 1);
+        const is4k = String(params.resolution || '').toLowerCase() === '4k';
+        const modelId = isStartEndMode
+            ? (is4k ? 'veo_3_1-fast-components-4K' : 'veo_3_1-fast-components')
+            : (is4k ? 'veo_3_1-fast-4K' : 'veo_3_1-fast');
+        const newCfg = { ...cfg, modelId, endpoint: '/v1/videos', queryEndpoint: '/v1/videos/{id}' };
+        return await generateVeo3Video(newCfg, prompt, params.aspectRatio, params.duration, images, false, isStartEndMode, true);
     }
 };
 
 export const VeoProHandler = {
-    rules: { resolutions: ['720p', '1080p'], durations: ['8s'], ratios: ['16:9', '9:16'], maxInputImages: 1 },
+    rules: { resolutions: ['720p', '4k'], durations: ['8s'], ratios: ['16:9', '9:16'], maxInputImages: 1 },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
-        let modelId = 'veo3.1-pro'; // Default Text-to-Video (Pro Mode)
-        let images = params.inputImages || [];
-
-        // Logic for Veo 3.1 Pro:
-        // Text-to-Video -> veo3.1-pro
-        // Image-to-Video -> veo3.1-components
-        
-        if (images.length > 0) {
-            modelId = 'veo3.1-components';
-            // Enforce max 1 image
-            if (images.length > 1) {
-                images = [images[0]];
-            }
-        }
-
-        const newCfg = { ...cfg, modelId, endpoint: '/v1/video/create' };
-        return await generateVeo3Video(newCfg, prompt, params.aspectRatio, images, params.promptOptimize);
+        const isStartEndMode = !!params.isStartEndMode;
+        const images = (params.inputImages || []).slice(0, 1);
+        const is4k = String(params.resolution || '').toLowerCase() === '4k';
+        const modelId = isStartEndMode
+            ? (is4k ? 'veo_3_1-components-4K' : 'veo_3_1-components')
+            : (is4k ? 'veo_3_1-4K' : 'veo_3_1');
+        const newCfg = { ...cfg, modelId, endpoint: '/v1/videos', queryEndpoint: '/v1/videos/{id}' };
+        return await generateVeo3Video(newCfg, prompt, params.aspectRatio, params.duration, images, false, isStartEndMode, false);
     }
 };
 

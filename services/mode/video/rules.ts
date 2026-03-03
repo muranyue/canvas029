@@ -36,7 +36,8 @@ export const getVideoConstraints = (modelName: string, resolution: string | unde
         }
     } else if (isVeo) {
         // Veo: disable 480p, disable 1:1/3:4/4:3 (keep only 16:9, 9:16), duration 8s only
-        disabledRes = ['480p']; 
+        resOptions = ['720p', '4k'];
+        disabledRes = ['480p', '1080p']; 
         disabledRatios = ['1:1', '3:4', '4:3'];
         disabledDurations = videoDurations.filter(d => d !== '8s');
     } else if (isSeedance) {
@@ -112,7 +113,7 @@ export const getAutoCorrectedVideoSettings = (modelName: string, resolution: str
              if (!['6s', '10s'].includes(currentDur)) updates.duration = '6s';
          }
     } else if (isVeo) {
-        if (resolution === '480p') updates.resolution = '720p';
+        if (!['720p', '4k'].includes((resolution || '').toLowerCase())) updates.resolution = '720p';
         if (duration !== '8s') updates.duration = '8s';
     } else if (isSeedance) {
         if (!['5s', '7s', '10s'].includes(duration || '')) updates.duration = '5s';

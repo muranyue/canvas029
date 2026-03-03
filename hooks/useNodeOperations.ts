@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { NodeData, Connection, NodeType } from '../types';
 import { generateCreativeDescription, generateImage, generateVideo } from '../services/geminiService';
+import { reportLocalDevFailure, normalizeErrorForLocalLog } from '../services/localDevLogger';
 
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 240;
@@ -39,6 +40,22 @@ const formatErrorMessage = (error: unknown): string => {
     }
 
     return 'Unknown error';
+};
+
+const mergeArtifacts = (newResults: string[], existingArtifacts: string[], currentPrimary?: string): string[] => {
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    const append = (value?: string) => {
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        merged.push(value);
+    };
+
+    newResults.forEach(append);
+    append(currentPrimary);
+    existingArtifacts.forEach(append);
+
+    return merged;
 };
 
 // Helper for resizing imported media constraints
@@ -91,6 +108,7 @@ export const useNodeOperations = ({
     getInputImages,
     containerRef,
 }: UseNodeOperationsProps) => {
+    const generatingNodeIdsRef = useRef<Set<string>>(new Set());
 
     const addNode = useCallback((type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => {
         if (x === undefined || y === undefined) {
@@ -154,8 +172,12 @@ export const useNodeOperations = ({
     }, [nodes, setNodes, setConnections, setDeletedNodes]);
 
     const handleGenerate = useCallback(async (nodeId: string) => {
+        if (generatingNodeIdsRef.current.has(nodeId)) return;
+
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
+
+        generatingNodeIdsRef.current.add(nodeId);
         updateNodeData(nodeId, { isLoading: true });
         
         const inputs = getInputImages(node.id);
@@ -172,35 +194,68 @@ export const useNodeOperations = ({
                         node.prompt || '', node.aspectRatio, node.model, node.resolution, node.count || 1, inputSrcs 
                     );
                 } else if (node.type === NodeType.TEXT_TO_VIDEO) {
-                    let effectiveModel = node.model;
-                    if (node.activeToolbarItem === 'start_end') {
-                        effectiveModel = (effectiveModel || '') + '_FL';
-                    }
                     results = await generateVideo(
-                        node.prompt || '', inputSrcs, node.aspectRatio, effectiveModel, node.resolution, node.duration, node.count || 1
+                        node.prompt || '',
+                        inputSrcs,
+                        node.aspectRatio,
+                        node.model,
+                        node.resolution,
+                        node.duration,
+                        node.count || 1,
+                        false,
+                        node.activeToolbarItem === 'start_end'
                     );
                 }
 
                 if (results.length > 0) {
-                    const currentArtifacts = node.outputArtifacts || [];
-                    if (node.imageSrc && !currentArtifacts.includes(node.imageSrc)) currentArtifacts.push(node.imageSrc);
-                    if (node.videoSrc && !currentArtifacts.includes(node.videoSrc)) currentArtifacts.push(node.videoSrc);
-                    const newArtifacts = [...results, ...currentArtifacts];
-                    
-                    const updates: Partial<NodeData> = { isLoading: false, outputArtifacts: newArtifacts };
-                    if (node.type === NodeType.TEXT_TO_IMAGE) updates.imageSrc = results[0];
-                    else if (node.type === NodeType.TEXT_TO_VIDEO) updates.videoSrc = results[0];
-                    updateNodeData(nodeId, updates);
+                    const nextPrimary = results[0];
+                    setNodes(prev => prev.map(existingNode => {
+                        if (existingNode.id !== nodeId) return existingNode;
+
+                        const currentPrimary = existingNode.type === NodeType.TEXT_TO_VIDEO
+                            ? existingNode.videoSrc
+                            : existingNode.imageSrc;
+
+                        const updates: Partial<NodeData> = {
+                            isLoading: false,
+                            outputArtifacts: mergeArtifacts(results, existingNode.outputArtifacts || [], currentPrimary),
+                        };
+
+                        if (existingNode.type === NodeType.TEXT_TO_IMAGE) {
+                            updates.imageSrc = nextPrimary;
+                        } else if (existingNode.type === NodeType.TEXT_TO_VIDEO) {
+                            updates.videoSrc = nextPrimary;
+                        }
+
+                        return { ...existingNode, ...updates };
+                    }));
                 } else {
                     throw new Error("No results returned");
                 }
             }
         } catch (e) {
             console.error(e);
-            alert(`Generation Failed: ${formatErrorMessage(e)}`);
+            const errorMessage = formatErrorMessage(e);
+            reportLocalDevFailure({
+                event: 'generation_failed',
+                nodeId,
+                nodeType: node.type,
+                model: node.model,
+                aspectRatio: node.aspectRatio,
+                resolution: node.resolution,
+                duration: node.duration,
+                activeToolbarItem: node.activeToolbarItem,
+                inputCount: inputSrcs.length,
+                inputKinds: inputs.map(input => (input.isVideo ? 'video' : 'image')),
+                errorMessage,
+                error: normalizeErrorForLocalLog(e),
+            });
+            alert(`Generation Failed: ${errorMessage}`);
             updateNodeData(nodeId, { isLoading: false });
+        } finally {
+            generatingNodeIdsRef.current.delete(nodeId);
         }
-    }, [nodes, updateNodeData, getInputImages]);
+    }, [nodes, updateNodeData, getInputImages, setNodes]);
 
     const handleMaximize = useCallback((nodeId: string, setPreviewMedia: (media: { url: string, type: 'image' | 'video' } | null) => void) => {
         const node = nodes.find(n => n.id === nodeId);
