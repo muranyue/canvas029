@@ -2,6 +2,30 @@
 import { ImageModelRules } from "../types";
 
 const DEFAULT_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+const GPT_IMAGE_2_RATIOS = ['1:1', '3:4', '4:3', '16:9', '9:16'];
+const GPT_IMAGE_2_SIZE_MAP: Record<string, Record<string, string>> = {
+    '1k': {
+        '1:1': '1024x1024',
+        '3:4': '960x1280',
+        '4:3': '1280x960',
+        '16:9': '1280x720',
+        '9:16': '720x1280',
+    },
+    '2k': {
+        '1:1': '2048x2048',
+        '3:4': '1920x2560',
+        '4:3': '2560x1920',
+        '16:9': '1920x1080',
+        '9:16': '1080x1920',
+    },
+    '4k': {
+        '1:1': '2880x2880',
+        '3:4': '2448x3264',
+        '4:3': '3264x2448',
+        '16:9': '3840x2160',
+        '9:16': '2160x3840',
+    },
+};
 
 export const IMAGE_MODEL_CAPABILITIES: Record<string, ImageModelRules> = {
     'BananaPro': { resolutions: ['1k', '2k', '4k'], ratios: DEFAULT_RATIOS },
@@ -12,6 +36,7 @@ export const IMAGE_MODEL_CAPABILITIES: Record<string, ImageModelRules> = {
     'Jmeng 4.5': { resolutions: ['2k', '4k'], ratios: DEFAULT_RATIOS },
     'Jmeng 4': { resolutions: ['2k', '4k'], ratios: DEFAULT_RATIOS },
     'Midjourney': { resolutions: ['1k'], ratios: DEFAULT_RATIOS },
+    'GPT Image 2': { resolutions: ['1k', '2k', '4k'], ratios: GPT_IMAGE_2_RATIOS, supportsEdit: true },
     'Zimage': { resolutions: ['1k'], ratios: DEFAULT_RATIOS, hasPromptExtend: true },
     'Qwenedit': { resolutions: ['1k'], ratios: DEFAULT_RATIOS }
 };
@@ -21,6 +46,11 @@ export const getImageModelRules = (modelName: string): ImageModelRules => {
 };
 
 export const calculateImageSize = (aspectRatio: string, resolution: string, modelName: string): string => {
+  if (modelName === 'GPT Image 2') {
+      const byResolution = GPT_IMAGE_2_SIZE_MAP[resolution] || GPT_IMAGE_2_SIZE_MAP['1k'];
+      return byResolution[aspectRatio] || byResolution['1:1'];
+  }
+
   if (modelName === 'Zimage' && resolution === '1k') {
       if (aspectRatio === '16:9') return '1280x720';
       if (aspectRatio === '9:16') return '720x1280';

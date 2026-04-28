@@ -19,8 +19,36 @@ export const MediaStack: React.FC<MediaStackProps> = ({
 }) => {
     const stackRef = useRef<HTMLDivElement>(null);
     const artifacts = data.outputArtifacts || [];
-    const sortedArtifacts = currentSrc ? [currentSrc, ...artifacts.filter(a => a !== currentSrc)] : artifacts;
-    const showBadge = !data.isStackOpen && artifacts.length > 1;
+    const originalArtifacts = data.outputOriginalArtifacts || artifacts;
+    const sortedArtifacts = (() => {
+        const entries: { displaySrc: string; originalSrc: string }[] = [];
+        const seen = new Set<string>();
+        const append = (displaySrc?: string, originalSrc?: string) => {
+            const display = displaySrc || originalSrc || '';
+            const original = originalSrc || displaySrc || '';
+            if (!display) return;
+            const key = `${display}|||${original}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            entries.push({ displaySrc: display, originalSrc: original });
+        };
+
+        if (currentSrc) {
+            append(currentSrc, type === 'image' ? (data.originalImageSrc || currentSrc) : currentSrc);
+        }
+
+        const total = Math.max(artifacts.length, originalArtifacts.length);
+        for (let i = 0; i < total; i++) {
+            const displaySrc = artifacts[i] || originalArtifacts[i];
+            const originalSrc = type === 'image'
+                ? (originalArtifacts[i] || artifacts[i])
+                : (artifacts[i] || originalArtifacts[i]);
+            append(displaySrc, originalSrc);
+        }
+
+        return entries;
+    })();
+    const showBadge = !data.isStackOpen && sortedArtifacts.length > 1;
 
     // Handle click outside to close stack
     useEffect(() => {
@@ -41,28 +69,28 @@ export const MediaStack: React.FC<MediaStackProps> = ({
     if (data.isStackOpen) {
         return (
             <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200" onTouchStart={(e) => e.stopPropagation()}>
-                {sortedArtifacts.map((src, index) => {
+                {sortedArtifacts.map((entry, index) => {
                     const isMain = index === 0;
                     return (
                       <div 
-                          key={src + index} 
+                          key={entry.displaySrc + index} 
                           className={`relative h-full rounded-xl border ${isDark ? 'border-zinc-800 bg-black' : 'border-gray-200 bg-white'} overflow-hidden shadow-2xl flex-shrink-0 group/card ${isMain ? 'ring-2 ring-cyan-500/50' : ''}`}
                           style={{ width: data.width }}
                       >
                            {type === 'image' ? (
-                               <img src={src} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
+                               <img src={entry.displaySrc} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
                            ) : (
-                               <video src={src} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
+                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
                            )}
                            
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">
                                {!isMain && (
-                                   <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); const update = type === 'image' ? { imageSrc: src } : { videoSrc: src }; updateData(data.id, { ...update, isStackOpen: false }); }}>
+                                   <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); const update = type === 'image' ? { imageSrc: entry.displaySrc, originalImageSrc: entry.originalSrc } : { videoSrc: entry.displaySrc }; updateData(data.id, { ...update, isStackOpen: false }); }}>
                                        <Icons.Check size={10} className="text-cyan-400" /><span>Main</span>
                                    </button>
                                )}
                                <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }}><Icons.Maximize2 size={12}/></button>
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src, type); }}><Icons.Download size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(type === 'image' ? entry.originalSrc : entry.displaySrc, type); }}><Icons.Download size={12}/></button>
                            </div>
                            
                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[9px] text-white font-mono border border-white/10 select-none">
@@ -92,7 +120,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
            {showBadge && (
                <div className="absolute top-2 right-2 bg-black/30 backdrop-blur-md hover:bg-black/50 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 border border-white/10 z-30 pointer-events-auto cursor-pointer select-none shadow-lg transition-colors group/badge" onClick={(e) => { e.stopPropagation(); updateData(data.id, { isStackOpen: true }); }} onTouchStart={(e) => e.stopPropagation()}>
                    <Icons.Layers size={10} className="text-cyan-400"/>
-                   <span className="font-bold tabular-nums">{artifacts.length}</span>
+                  <span className="font-bold tabular-nums">{sortedArtifacts.length}</span>
                    <Icons.ChevronRight size={10} className="text-zinc-400 group-hover/badge:text-white" />
                </div>
            )}

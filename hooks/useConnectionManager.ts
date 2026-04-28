@@ -32,12 +32,13 @@ export const useConnectionManager = ({
             map[node.id] = connections
                 .filter(c => c.targetId === node.id)
                 .map(c => nodes.find(n => n.id === c.sourceId))
-                .filter(n => n && (n.imageSrc || n.videoSrc))
+                .filter(n => n && (n.imageSrc || n.originalImageSrc || n.videoSrc))
                 .map(n => ({
-                    src: n!.videoSrc || n!.imageSrc || '',
+                    src: n!.videoSrc || n!.originalImageSrc || n!.imageSrc || '',
                     isVideo: !!n!.videoSrc
                 }));
         });
+
         return map;
     }, [nodes, connections]);
 

@@ -296,12 +296,43 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
 }) => {
     const stackRef = useRef<HTMLDivElement>(null);
     const artifacts = data.outputArtifacts || [];
-    const seenArtifacts = new Set<string>();
-    const sortedArtifacts = (currentSrc ? [currentSrc, ...artifacts] : artifacts).filter((src) => {
-        if (!src || seenArtifacts.has(src)) return false;
-        seenArtifacts.add(src);
-        return true;
-    });
+    const originalArtifacts = data.outputOriginalArtifacts || artifacts;
+    const sortedArtifacts = (() => {
+        const entries: { displaySrc: string; originalSrc: string; isVideo: boolean }[] = [];
+        const seen = new Set<string>();
+        const isVideoNode = data.type === 'TEXT_TO_VIDEO';
+        const isVideoUrl = (src?: string) => !!src && /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src);
+        const append = (displaySrc?: string, originalSrc?: string, isVideoHint?: boolean) => {
+            const display = displaySrc || originalSrc || '';
+            const original = originalSrc || displaySrc || '';
+            if (!display) return;
+            const isVideo = isVideoHint ?? (isVideoNode || isVideoUrl(display) || isVideoUrl(original));
+            const key = `${display}|||${original}|||${isVideo ? 'v' : 'i'}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            entries.push({ displaySrc: display, originalSrc: isVideo ? display : original, isVideo });
+        };
+
+        if (currentSrc) {
+            append(
+                currentSrc,
+                isVideoNode ? currentSrc : (data.originalImageSrc || currentSrc),
+                isVideoNode || isVideoUrl(currentSrc)
+            );
+        }
+
+        const total = Math.max(artifacts.length, originalArtifacts.length);
+        for (let i = 0; i < total; i++) {
+            const displaySrc = artifacts[i] || originalArtifacts[i];
+            const isVideo = isVideoNode || isVideoUrl(displaySrc) || isVideoUrl(originalArtifacts[i]);
+            const originalSrc = isVideo
+                ? (displaySrc || originalArtifacts[i])
+                : (originalArtifacts[i] || artifacts[i]);
+            append(displaySrc, originalSrc, isVideo);
+        }
+
+        return entries;
+    })();
     const showBadge = !data.isStackOpen && sortedArtifacts.length > 1;
 
     useEffect(() => {
@@ -313,20 +344,20 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
     if (data.isStackOpen) {
         return (
             <div ref={stackRef} className="absolute top-0 left-0 h-full flex gap-4 z-[100] animate-in fade-in zoom-in-95 duration-200" onTouchStart={(e) => e.stopPropagation()} data-interactive="true">
-                {sortedArtifacts.map((src, index) => {
+                {sortedArtifacts.map((entry, index) => {
                     const isMain = index === 0;
-                    const isVideo = /\.(mp4|webm|mov|mkv)(\?|$)/i.test(src) || data.type === 'TEXT_TO_VIDEO';
+                    const isVideo = entry.isVideo;
                     return (
-                      <div key={src + index} className={`relative h-full rounded-xl border ${isDark ? 'border-zinc-800 bg-black' : 'border-gray-200 bg-white'} overflow-hidden shadow-2xl flex-shrink-0 group/card ${isMain ? 'ring-2 ring-cyan-500/50' : ''}`} style={{ width: data.width }}>
+                      <div key={entry.displaySrc + index} className={`relative h-full rounded-xl border ${isDark ? 'border-zinc-800 bg-black' : 'border-gray-200 bg-white'} overflow-hidden shadow-2xl flex-shrink-0 group/card ${isMain ? 'ring-2 ring-cyan-500/50' : ''}`} style={{ width: data.width }}>
                            {isVideo ? (
-                               <video src={src} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
+                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
                            ) : (
-                               <img src={src} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
+                               <img src={entry.displaySrc} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
                            )}
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">
-                               {!isMain && <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); updateData(data.id, { [isVideo ? 'videoSrc' : 'imageSrc']: src, isStackOpen: false }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, { [isVideo ? 'videoSrc' : 'imageSrc']: src, isStackOpen: false }); }} data-interactive="true"><Icons.Check size={10} className="text-cyan-400" /><span>Main</span></button>}
+                               {!isMain && <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); updateData(data.id, isVideo ? { videoSrc: entry.displaySrc, isStackOpen: false } : { imageSrc: entry.displaySrc, originalImageSrc: entry.originalSrc, isStackOpen: false }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, isVideo ? { videoSrc: entry.displaySrc, isStackOpen: false } : { imageSrc: entry.displaySrc, originalImageSrc: entry.originalSrc, isStackOpen: false }); }} data-interactive="true"><Icons.Check size={10} className="text-cyan-400" /><span>Main</span></button>}
                                <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12}/></button>
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(src); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); safeDownload(src); }} data-interactive="true"><Icons.Download size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(isVideo ? entry.displaySrc : entry.originalSrc); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); safeDownload(isVideo ? entry.displaySrc : entry.originalSrc); }} data-interactive="true"><Icons.Download size={12}/></button>
                            </div>
                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[9px] text-white font-mono border border-white/10 select-none">#{index + 1}</div>
                       </div>

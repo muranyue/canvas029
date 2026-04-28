@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { NodeData, CanvasTransform, Point, NodeType, Connection } from '../types';
-import { calculateImportDimensions } from './useNodeOperations';
+import { calculateImportDimensions, createDisplayImageSrc } from './useNodeOperations';
 
 // ========== Types ==========
 interface CanvasRefs {
@@ -107,7 +107,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     const handleConfirmNew = useCallback((shouldSave: boolean) => {
         if (shouldSave) handleSaveWorkflow();
-        const withContent = nodes.filter(n => n.imageSrc || n.videoSrc);
+        const withContent = nodes.filter(n => n.imageSrc || n.originalImageSrc || n.videoSrc);
         if (withContent.length > 0) setDeletedNodes(prev => [...prev, ...withContent]);
         setNodes([]);
         setConnections([]);
@@ -142,14 +142,16 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 const { width, height, ratio } = calculateImportDimensions(img.width, img.height);
                 const src = event.target?.result as string;
+                const displaySrc = await createDisplayImageSrc(src);
                 const rect = containerRef.current?.getBoundingClientRect();
                 if (rect) {
                     const center = screenToWorld(rect.width / 2, rect.height / 2);
                     addNode(NodeType.ORIGINAL_IMAGE, center.x - width / 2, center.y - height / 2, {
-                        width, height, imageSrc: src, aspectRatio: `${ratio}:1`, outputArtifacts: [src]
+                        width, height, imageSrc: displaySrc, originalImageSrc: src, aspectRatio: `${ratio}:1`,
+                        outputArtifacts: [displaySrc], outputOriginalArtifacts: [src]
                     });
                 }
             };
@@ -166,16 +168,19 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             const reader = new FileReader();
             reader.onload = (event) => {
                 const img = new Image();
-                img.onload = () => {
+                img.onload = async () => {
                     const node = nodes.find(n => n.id === nodeId);
                     if (node) {
                         const { width, height, ratio } = calculateImportDimensions(img.width, img.height);
                         const src = event.target?.result as string;
+                        const displaySrc = await createDisplayImageSrc(src);
                         const currentArtifacts = node.outputArtifacts || [];
+                        const currentOriginalArtifacts = node.outputOriginalArtifacts || node.outputArtifacts || [];
                         updateNodeData(nodeId, {
-                            imageSrc: src, width, height,
+                            imageSrc: displaySrc, originalImageSrc: src, width, height,
                             aspectRatio: `${ratio}:1`,
-                            outputArtifacts: [src, ...currentArtifacts]
+                            outputArtifacts: [displaySrc, ...currentArtifacts],
+                            outputOriginalArtifacts: [src, ...currentOriginalArtifacts],
                         });
                     }
                 };
@@ -202,10 +207,12 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 reader.onload = (event) => {
                     const src = event.target?.result as string;
                     const img = new Image();
-                    img.onload = () => {
+                    img.onload = async () => {
                         const { width, height, ratio } = calculateImportDimensions(img.width, img.height);
+                        const displaySrc = await createDisplayImageSrc(src);
                         addNode(NodeType.ORIGINAL_IMAGE, worldPos.x - width / 2 + offsetX, worldPos.y - height / 2 + offsetY, {
-                            width, height, imageSrc: src, aspectRatio: `${ratio}:1`, outputArtifacts: [src]
+                            width, height, imageSrc: displaySrc, originalImageSrc: src, aspectRatio: `${ratio}:1`,
+                            outputArtifacts: [displaySrc], outputOriginalArtifacts: [src]
                         });
                     };
                     img.src = src;

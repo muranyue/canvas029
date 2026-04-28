@@ -1,13 +1,14 @@
 
 import { ImageModelRules, ModelConfig } from "../types";
 import { generateBananaChatImage, generateBananaEdit } from "./banana";
-import { generateStandardImage, generateMjModal } from "./flux";
+import { generateStandardImage, generateMjModal, generateGptImage2 } from "./flux";
 import { calculateImageSize } from "./rules";
 
 // --- Base Rules ---
 const BASE_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9'];
 const EXTENDED_RATIOS = ['1:1', '3:4', '4:3', '9:16', '16:9', '21:9', '9:21'];
 const BANANA2_RATIOS = [...EXTENDED_RATIOS, '1:4', '4:1', '1:8', '8:1'];
+const GPT_IMAGE_2_RATIOS = ['1:1', '3:4', '4:3', '16:9', '9:16'];
 
 // --- Model Specific Implementations ---
 
@@ -74,6 +75,14 @@ export const MJHandler = {
     }
 };
 
+export const GPTImage2Handler = {
+    rules: { resolutions: ['1k', '2k', '4k'], ratios: GPT_IMAGE_2_RATIOS, supportsEdit: true },
+    generate: async (cfg: ModelConfig, prompt: string, params: any) => {
+        const size = calculateImageSize(params.aspectRatio, params.resolution || '1k', 'GPT Image 2');
+        return await generateGptImage2(cfg, prompt, size, params.inputImages || [], params.count || 1);
+    }
+};
+
 export const ZimageHandler = {
     rules: { resolutions: ['1k'], ratios: BASE_RATIOS },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
@@ -99,6 +108,7 @@ export const IMAGE_HANDLERS: Record<string, any> = {
     'Jmeng 4.5': Jimeng45Handler,
     'Jmeng 4': Jimeng4Handler,
     'Midjourney': MJHandler,
+    'GPT Image 2': GPTImage2Handler,
     'Zimage': ZimageHandler,
     'Qwenedit': QwenEditHandler
 };

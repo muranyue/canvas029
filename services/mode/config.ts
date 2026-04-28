@@ -39,6 +39,14 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
   'Jmeng 4': { id: 'doubao-seedream-4-0-250828', name: 'Jmeng 4', type: 'IMAGE_GEN', category: 'IMAGE', defaultEndpoint: '/v1/images/generations' },
   
   'Midjourney': { id: 'mj_modal', name: 'Midjourney', type: 'MJ_MODAL', category: 'IMAGE', defaultEndpoint: '/mj/submit/modal' },
+  'GPT Image 2': {
+      id: 'gpt-image-2',
+      name: 'GPT Image 2',
+      type: 'IMAGE_GEN',
+      category: 'IMAGE',
+      defaultEndpoint: 'https://duomiapi.com/v1/images/generations?async=true',
+      defaultQueryEndpoint: '/v1/tasks/{id}'
+  },
   'Zimage': { id: 'z-image-turbo', name: 'Qwen Zimage', type: 'IMAGE_GEN', category: 'IMAGE', defaultEndpoint: '/v1/images/generations' },
   'Qwenedit': { id: 'qwen-image-edit-2509', name: 'Qwen Edit', type: 'IMAGE_GEN', category: 'IMAGE', defaultEndpoint: '/v1/images/generations' },
 

@@ -32,7 +32,7 @@ const getProvider = (key: string, name: string): string => {
     if (lowerKey.includes('kling') || lowerKey.includes('可灵') || lowerName.includes('kling')) return 'Kling AI';
     
     // OpenAI (Sora)
-    if (lowerKey.includes('sora') || lowerName.includes('sora')) return 'OpenAI';
+    if (lowerKey.includes('sora') || lowerName.includes('sora') || lowerKey.includes('gpt') || lowerName.includes('gpt')) return 'OpenAI';
     
     // Midjourney
     if (lowerKey.includes('mj') || lowerName.includes('midjourney')) return 'Midjourney';

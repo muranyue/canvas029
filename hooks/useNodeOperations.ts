@@ -5,6 +5,7 @@ import { reportLocalDevFailure, normalizeErrorForLocalLog } from '../services/lo
 
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 240;
+const MAX_DISPLAY_IMAGE_SIDE = 720;
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -79,6 +80,68 @@ export const calculateImportDimensions = (naturalWidth: number, naturalHeight: n
     return { width, height, ratio };
 };
 
+export const createDisplayImageSrc = async (source: string, maxSide: number = MAX_DISPLAY_IMAGE_SIDE): Promise<string> => {
+    if (!source) return source;
+
+    return new Promise((resolve) => {
+        const img = new Image();
+
+        if (/^https?:\/\//i.test(source)) {
+            img.crossOrigin = 'anonymous';
+        }
+
+        img.onload = () => {
+            const naturalWidth = img.naturalWidth || img.width || 0;
+            const naturalHeight = img.naturalHeight || img.height || 0;
+
+            if (naturalWidth <= 0 || naturalHeight <= 0) {
+                resolve(source);
+                return;
+            }
+
+            const longestSide = Math.max(naturalWidth, naturalHeight);
+            if (longestSide <= maxSide) {
+                resolve(source);
+                return;
+            }
+
+            const scale = maxSide / longestSide;
+            const width = Math.max(1, Math.round(naturalWidth * scale));
+            const height = Math.max(1, Math.round(naturalHeight * scale));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                resolve(source);
+                return;
+            }
+
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
+
+            try {
+                let preview = canvas.toDataURL('image/webp', 0.82);
+                if (!preview || preview === 'data:,') {
+                    preview = canvas.toDataURL('image/jpeg', 0.85);
+                }
+                if (!preview || preview === 'data:,') {
+                    preview = canvas.toDataURL('image/png');
+                }
+                resolve(preview && preview !== 'data:,' ? preview : source);
+            } catch (_err) {
+                resolve(source);
+            }
+        };
+
+        img.onerror = () => resolve(source);
+        img.src = source;
+    });
+};
+
 interface UseNodeOperationsProps {
     nodes: NodeData[];
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
@@ -135,6 +198,9 @@ export const useNodeOperations = ({
             if (!dataOverride?.height) h = 400;
         }
         
+        const fallbackDisplayImage = dataOverride?.imageSrc || dataOverride?.originalImageSrc;
+        const fallbackOriginalImage = dataOverride?.originalImageSrc || dataOverride?.imageSrc;
+
         const newNode: NodeData = {
             id: generateId(),
             type,
@@ -152,9 +218,11 @@ export const useNodeOperations = ({
             duration: dataOverride?.duration || (type === NodeType.TEXT_TO_VIDEO ? '5s' : undefined),
             count: 1,
             prompt: dataOverride?.prompt || '',
-            imageSrc: dataOverride?.imageSrc,
+            imageSrc: fallbackDisplayImage,
+            originalImageSrc: fallbackOriginalImage,
             videoSrc: dataOverride?.videoSrc,
-            outputArtifacts: dataOverride?.outputArtifacts || (dataOverride?.imageSrc || dataOverride?.videoSrc ? [dataOverride.imageSrc || dataOverride.videoSrc!] : [])
+            outputArtifacts: dataOverride?.outputArtifacts || (fallbackDisplayImage || dataOverride?.videoSrc ? [fallbackDisplayImage || dataOverride.videoSrc!] : []),
+            outputOriginalArtifacts: dataOverride?.outputOriginalArtifacts || (fallbackOriginalImage ? [fallbackOriginalImage] : undefined),
         };
         
         setNodes(prev => [...prev, newNode]);
@@ -164,7 +232,7 @@ export const useNodeOperations = ({
 
     const deleteNode = useCallback((id: string) => {
         const node = nodes.find(n => n.id === id);
-        if (node && (node.imageSrc || node.videoSrc)) {
+        if (node && (node.imageSrc || node.originalImageSrc || node.videoSrc)) {
             setDeletedNodes(prev => [...prev, node]);
         }
         setNodes(prev => prev.filter(n => n.id !== id));
@@ -208,27 +276,47 @@ export const useNodeOperations = ({
                 }
 
                 if (results.length > 0) {
-                    const nextPrimary = results[0];
-                    setNodes(prev => prev.map(existingNode => {
-                        if (existingNode.id !== nodeId) return existingNode;
+                    if (node.type === NodeType.TEXT_TO_IMAGE) {
+                        const originalResults = results;
+                        const displayResults = await Promise.all(
+                            originalResults.map((src) => createDisplayImageSrc(src))
+                        );
+                        const normalizedDisplayResults = displayResults.map((src, idx) => src || originalResults[idx]);
+                        const nextDisplayPrimary = normalizedDisplayResults[0];
+                        const nextOriginalPrimary = originalResults[0];
 
-                        const currentPrimary = existingNode.type === NodeType.TEXT_TO_VIDEO
-                            ? existingNode.videoSrc
-                            : existingNode.imageSrc;
+                        setNodes(prev => prev.map(existingNode => {
+                            if (existingNode.id !== nodeId) return existingNode;
 
-                        const updates: Partial<NodeData> = {
-                            isLoading: false,
-                            outputArtifacts: mergeArtifacts(results, existingNode.outputArtifacts || [], currentPrimary),
-                        };
+                            const currentDisplayPrimary = existingNode.imageSrc;
+                            const currentOriginalPrimary = existingNode.originalImageSrc || existingNode.imageSrc;
+                            const existingOriginalArtifacts = existingNode.outputOriginalArtifacts || existingNode.outputArtifacts || [];
 
-                        if (existingNode.type === NodeType.TEXT_TO_IMAGE) {
-                            updates.imageSrc = nextPrimary;
-                        } else if (existingNode.type === NodeType.TEXT_TO_VIDEO) {
+                            const updates: Partial<NodeData> = {
+                                isLoading: false,
+                                imageSrc: nextDisplayPrimary,
+                                originalImageSrc: nextOriginalPrimary,
+                                outputArtifacts: mergeArtifacts(normalizedDisplayResults, existingNode.outputArtifacts || [], currentDisplayPrimary),
+                                outputOriginalArtifacts: mergeArtifacts(originalResults, existingOriginalArtifacts, currentOriginalPrimary),
+                            };
+
+                            return { ...existingNode, ...updates };
+                        }));
+                    } else {
+                        const nextPrimary = results[0];
+                        setNodes(prev => prev.map(existingNode => {
+                            if (existingNode.id !== nodeId) return existingNode;
+
+                            const currentPrimary = existingNode.videoSrc;
+                            const updates: Partial<NodeData> = {
+                                isLoading: false,
+                                outputArtifacts: mergeArtifacts(results, existingNode.outputArtifacts || [], currentPrimary),
+                            };
+
                             updates.videoSrc = nextPrimary;
-                        }
-
-                        return { ...existingNode, ...updates };
-                    }));
+                            return { ...existingNode, ...updates };
+                        }));
+                    }
                 } else {
                     throw new Error("No results returned");
                 }
@@ -261,14 +349,14 @@ export const useNodeOperations = ({
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
         if (node.videoSrc) setPreviewMedia({ url: node.videoSrc, type: 'video' });
-        else if (node.imageSrc) setPreviewMedia({ url: node.imageSrc, type: 'image' });
+        else if (node.originalImageSrc || node.imageSrc) setPreviewMedia({ url: node.originalImageSrc || node.imageSrc || '', type: 'image' });
         else alert("No content to preview.");
     }, [nodes]);
 
     const handleDownload = useCallback(async (nodeId: string) => {
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
-        const url = node.videoSrc || node.imageSrc;
+        const url = node.videoSrc || node.originalImageSrc || node.imageSrc;
         if (!url) { alert("No content to download."); return; }
         
         const ext = node.videoSrc ? 'mp4' : 'png';

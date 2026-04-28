@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { NodeData, Connection, NodeType, Point } from '../types';
-import { calculateImportDimensions } from './useNodeOperations';
+import { calculateImportDimensions, createDisplayImageSrc } from './useNodeOperations';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -82,9 +82,10 @@ export const useClipboard = ({
 
     const copyImageToClipboard = useCallback(async (nodeId: string) => {
         const node = nodes.find(n => n.id === nodeId);
-        if (node && node.imageSrc) {
+        const source = node?.originalImageSrc || node?.imageSrc;
+        if (source) {
             try {
-                const res = await fetch(node.imageSrc);
+                const res = await fetch(source);
                 const blob = await res.blob();
                 await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob as Blob })]);
                 alert("Image copied to clipboard");
@@ -118,11 +119,18 @@ export const useClipboard = ({
                         const reader = new FileReader();
                         reader.onload = (event) => {
                             const img = new Image();
-                            img.onload = () => {
+                            img.onload = async () => {
                                 const { width, height, ratio } = calculateImportDimensions(img.width, img.height);
                                 const src = event.target?.result as string;
+                                const displaySrc = await createDisplayImageSrc(src);
                                 addNode(NodeType.ORIGINAL_IMAGE, worldPos.x, worldPos.y, {
-                                    width, height, imageSrc: src, aspectRatio: `${ratio}:1`, outputArtifacts: [src]
+                                    width,
+                                    height,
+                                    imageSrc: displaySrc,
+                                    originalImageSrc: src,
+                                    aspectRatio: `${ratio}:1`,
+                                    outputArtifacts: [displaySrc],
+                                    outputOriginalArtifacts: [src],
                                 });
                             };
                             img.src = event.target?.result as string;

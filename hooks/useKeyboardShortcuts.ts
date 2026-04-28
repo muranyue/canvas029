@@ -102,7 +102,7 @@ export const useKeyboardShortcuts = ({
                 if (e.key === 'Delete' || e.key === 'Backspace') {
                     if (selectedNodeIds.size > 0) {
                         const nodesToDelete = nodes.filter(n => selectedNodeIds.has(n.id));
-                        const withContent = nodesToDelete.filter(n => n.imageSrc || n.videoSrc);
+                        const withContent = nodesToDelete.filter(n => n.imageSrc || n.originalImageSrc || n.videoSrc);
                         if (withContent.length > 0) {
                             setDeletedNodes(prev => [...prev, ...withContent]);
                         }

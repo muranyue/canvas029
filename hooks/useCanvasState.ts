@@ -29,6 +29,9 @@ const loadState = <T,>(key: string, fallback: T): T => {
     }
 };
 
+const isBlobUrl = (url?: string): boolean => !!url && url.startsWith('blob:');
+const isInlineMediaUrl = (url?: string): boolean => !!url && (url.startsWith('data:') || url.startsWith('blob:'));
+
 const getCanvasDb = (): Promise<IDBDatabase | null> => {
     if (typeof window === 'undefined' || !window.indexedDB) {
         return Promise.resolve(null);
@@ -96,12 +99,17 @@ const normalizeNodesForLoad = (nodes: NodeData[]): NodeData[] => {
     // Also clear blob URLs as they become invalid after page refresh
     return nodes.map(node => {
         const updates: Partial<NodeData> = { isLoading: false };
-        const hadBlobImageSrc = !!(node.imageSrc && node.imageSrc.startsWith('blob:'));
-        const hadBlobVideoSrc = !!(node.videoSrc && node.videoSrc.startsWith('blob:'));
+        const hadBlobImageSrc = isBlobUrl(node.imageSrc);
+        const hadBlobOriginalImageSrc = isBlobUrl(node.originalImageSrc);
+        const hadBlobVideoSrc = isBlobUrl(node.videoSrc);
+        const isVideoNode = node.type === 'TEXT_TO_VIDEO';
         
         // Check if imageSrc is a blob URL (invalid after refresh)
         if (hadBlobImageSrc) {
             updates.imageSrc = undefined;
+        }
+        if (hadBlobOriginalImageSrc) {
+            updates.originalImageSrc = undefined;
         }
         
         // Check if videoSrc is a blob URL (invalid after refresh)
@@ -109,17 +117,57 @@ const normalizeNodesForLoad = (nodes: NodeData[]): NodeData[] => {
             updates.videoSrc = undefined;
         }
         
-        // Filter out blob URLs from outputArtifacts
-        if (node.outputArtifacts && node.outputArtifacts.length > 0) {
-            const validArtifacts = node.outputArtifacts.filter(url => !url.startsWith('blob:'));
-            updates.outputArtifacts = validArtifacts;
-            
-            // If current src was blob and we have valid artifacts, use the first one
-            if (hadBlobImageSrc && validArtifacts.length > 0 && node.type !== 'TEXT_TO_VIDEO') {
-                updates.imageSrc = validArtifacts[0];
+        // Keep display/original artifact arrays aligned and remove invalid blob URLs
+        const displayArtifacts = node.outputArtifacts || [];
+        const originalArtifacts = node.outputOriginalArtifacts || displayArtifacts;
+        if (displayArtifacts.length > 0 || originalArtifacts.length > 0) {
+            const normalizedPairs: { display: string; original: string }[] = [];
+            const total = Math.max(displayArtifacts.length, originalArtifacts.length);
+            for (let i = 0; i < total; i++) {
+                const displayCandidate = displayArtifacts[i] || originalArtifacts[i];
+                const originalCandidate = originalArtifacts[i] || displayArtifacts[i];
+                if (!displayCandidate && !originalCandidate) continue;
+                const validDisplay = displayCandidate && !isBlobUrl(displayCandidate) ? displayCandidate : undefined;
+                const validOriginal = originalCandidate && !isBlobUrl(originalCandidate) ? originalCandidate : undefined;
+                if (!validDisplay && !validOriginal) continue;
+                normalizedPairs.push({
+                    display: validDisplay || validOriginal || '',
+                    original: validOriginal || validDisplay || '',
+                });
             }
-            if (hadBlobVideoSrc && validArtifacts.length > 0 && node.type === 'TEXT_TO_VIDEO') {
-                updates.videoSrc = validArtifacts[0];
+
+            updates.outputArtifacts = normalizedPairs.map((pair) => pair.display);
+            if (!isVideoNode || (node.outputOriginalArtifacts && node.outputOriginalArtifacts.length > 0)) {
+                updates.outputOriginalArtifacts = normalizedPairs.map((pair) => pair.original);
+            }
+
+            // Recover primary src when blob got invalidated or legacy data is missing fields
+            if (normalizedPairs.length > 0) {
+                if (isVideoNode) {
+                    if (hadBlobVideoSrc || !node.videoSrc) {
+                        updates.videoSrc = normalizedPairs[0].display;
+                    }
+                } else {
+                    if (hadBlobImageSrc || hadBlobOriginalImageSrc || !node.imageSrc || !node.originalImageSrc) {
+                        updates.imageSrc = normalizedPairs[0].display;
+                        updates.originalImageSrc = normalizedPairs[0].original;
+                    }
+                }
+            }
+        }
+
+        // Legacy compatibility for image nodes: keep both display/original available
+        if (!isVideoNode) {
+            const resolvedImageSrc = hadBlobImageSrc ? updates.imageSrc : (updates.imageSrc ?? node.imageSrc);
+            const resolvedOriginalSrc = hadBlobOriginalImageSrc
+                ? updates.originalImageSrc
+                : (updates.originalImageSrc ?? node.originalImageSrc ?? node.imageSrc);
+
+            if (!resolvedOriginalSrc && resolvedImageSrc) {
+                updates.originalImageSrc = resolvedImageSrc;
+            }
+            if (!resolvedImageSrc && resolvedOriginalSrc) {
+                updates.imageSrc = resolvedOriginalSrc;
             }
         }
         
@@ -130,15 +178,57 @@ const normalizeNodesForLoad = (nodes: NodeData[]): NodeData[] => {
 const stripHeavyMediaForFallback = (nodes: NodeData[]): NodeData[] => {
     return nodes.map((node) => {
         const nextNode: NodeData = { ...node };
+        const isVideoNode = nextNode.type === 'TEXT_TO_VIDEO';
 
-        if (nextNode.imageSrc && (nextNode.imageSrc.startsWith('data:') || nextNode.imageSrc.startsWith('blob:'))) {
+        if (isInlineMediaUrl(nextNode.imageSrc)) {
             nextNode.imageSrc = undefined;
         }
-        if (nextNode.videoSrc && (nextNode.videoSrc.startsWith('data:') || nextNode.videoSrc.startsWith('blob:'))) {
+        if (isInlineMediaUrl(nextNode.originalImageSrc)) {
+            nextNode.originalImageSrc = undefined;
+        }
+        if (isInlineMediaUrl(nextNode.videoSrc)) {
             nextNode.videoSrc = undefined;
         }
-        if (nextNode.outputArtifacts && nextNode.outputArtifacts.length > 0) {
-            nextNode.outputArtifacts = nextNode.outputArtifacts.filter((url) => !url.startsWith('data:') && !url.startsWith('blob:'));
+
+        const displayArtifacts = nextNode.outputArtifacts || [];
+        const originalArtifacts = nextNode.outputOriginalArtifacts || displayArtifacts;
+        if (displayArtifacts.length > 0 || originalArtifacts.length > 0) {
+            const pairs: { display: string; original: string }[] = [];
+            const total = Math.max(displayArtifacts.length, originalArtifacts.length);
+            for (let i = 0; i < total; i++) {
+                const displayCandidate = displayArtifacts[i] || originalArtifacts[i];
+                const originalCandidate = originalArtifacts[i] || displayArtifacts[i];
+                if (!displayCandidate && !originalCandidate) continue;
+                const validDisplay = displayCandidate && !isInlineMediaUrl(displayCandidate) ? displayCandidate : undefined;
+                const validOriginal = originalCandidate && !isInlineMediaUrl(originalCandidate) ? originalCandidate : undefined;
+                if (!validDisplay && !validOriginal) continue;
+                pairs.push({
+                    display: validDisplay || validOriginal || '',
+                    original: validOriginal || validDisplay || '',
+                });
+            }
+            nextNode.outputArtifacts = pairs.map((pair) => pair.display);
+            if (!isVideoNode || (nextNode.outputOriginalArtifacts && nextNode.outputOriginalArtifacts.length > 0)) {
+                nextNode.outputOriginalArtifacts = pairs.map((pair) => pair.original);
+            }
+
+            if (pairs.length > 0) {
+                if (isVideoNode) {
+                    if (!nextNode.videoSrc) nextNode.videoSrc = pairs[0].display;
+                } else {
+                    if (!nextNode.imageSrc) nextNode.imageSrc = pairs[0].display;
+                    if (!nextNode.originalImageSrc) nextNode.originalImageSrc = pairs[0].original;
+                }
+            }
+        }
+
+        if (!isVideoNode) {
+            if (!nextNode.originalImageSrc && nextNode.imageSrc) {
+                nextNode.originalImageSrc = nextNode.imageSrc;
+            }
+            if (!nextNode.imageSrc && nextNode.originalImageSrc) {
+                nextNode.imageSrc = nextNode.originalImageSrc;
+            }
         }
 
         return nextNode;
@@ -158,8 +248,10 @@ const countMediaRefs = (nodes: NodeData[]): number => {
     let total = 0;
     for (const node of nodes) {
         if (node.imageSrc) total += 1;
+        if (node.originalImageSrc) total += 1;
         if (node.videoSrc) total += 1;
         if (node.outputArtifacts && node.outputArtifacts.length > 0) total += node.outputArtifacts.length;
+        if (node.outputOriginalArtifacts && node.outputOriginalArtifacts.length > 0) total += node.outputOriginalArtifacts.length;
     }
     return total;
 };
@@ -322,10 +414,13 @@ export const useCanvasState = () => {
 
         const isGenerating = nodes.some(n => n.isLoading);
         const hasInlineMedia = nodes.some((node) => {
-            if ((node.imageSrc && node.imageSrc.startsWith('data:')) || (node.videoSrc && node.videoSrc.startsWith('data:'))) {
+            if (isInlineMediaUrl(node.imageSrc) || isInlineMediaUrl(node.originalImageSrc) || isInlineMediaUrl(node.videoSrc)) {
                 return true;
             }
-            if (node.outputArtifacts && node.outputArtifacts.some((url) => url.startsWith('data:'))) {
+            if (node.outputArtifacts && node.outputArtifacts.some((url) => isInlineMediaUrl(url))) {
+                return true;
+            }
+            if (node.outputOriginalArtifacts && node.outputOriginalArtifacts.some((url) => isInlineMediaUrl(url))) {
                 return true;
             }
             return false;
@@ -414,7 +509,6 @@ export const useCanvasState = () => {
     }, [nodes, transform, viewportSize]);
 
     const visibleNodeIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
-
     // Calculate visible connections
     const visibleConnections = useMemo(() => {
         if (viewportSize.width === 0 || viewportSize.height === 0) return connections;

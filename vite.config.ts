@@ -43,6 +43,14 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/__duomi_proxy': {
+            target: 'https://duomiapi.com',
+            changeOrigin: true,
+            secure: true,
+            rewrite: (path: string) => path.replace(/^\/__duomi_proxy/, ''),
+          }
+        }
       },
       plugins: [react(), localTestLogPlugin],
       define: {

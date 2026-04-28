@@ -18,9 +18,11 @@ export interface NodeData {
   
   // State
   prompt?: string;
-  imageSrc?: string; // Result or Input (Active Selection)
+  imageSrc?: string; // Display image (capped for canvas performance)
+  originalImageSrc?: string; // Original image source (for maximize/download/upload input)
   videoSrc?: string; // Result (Active Selection)
-  outputArtifacts?: string[]; // History/Batch results
+  outputArtifacts?: string[]; // Display history/Batch results
+  outputOriginalArtifacts?: string[]; // Original history/Batch results
   isLoading?: boolean;
   isStackOpen?: boolean; // UI State for expanded gallery
   
