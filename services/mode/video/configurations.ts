@@ -150,10 +150,30 @@ export const Grok3Handler = {
 };
 
 export const ViduHandler = {
-    rules: { resolutions: ['720p', '1080p'], durations: ['3s', '4s', '5s', '6s', '8s', '10s'], ratios: ['1:1', '16:9', '9:16'], maxInputImages: 1, hasPromptExtend: true },
+    rules: { resolutions: ['720p', '1080p'], durations: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '16s'], ratios: ['1:1', '16:9', '9:16'], maxInputImages: 2, hasPromptExtend: true },
     generate: async (cfg: ModelConfig, prompt: string, params: any) => {
-        return await generateViduVideo(cfg, prompt, params.aspectRatio, params.resolution, params.duration, params.inputImages, params.promptOptimize);
+        return await generateViduVideo(
+            cfg,
+            prompt,
+            params.aspectRatio,
+            params.resolution,
+            params.duration,
+            params.inputImages,
+            params.isStartEndMode,
+            params.isReferenceMode,
+            params.promptOptimize
+        );
     }
+};
+
+export const ViduQ2Handler = {
+    ...ViduHandler,
+    rules: { resolutions: ['720p', '1080p'], durations: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s'], ratios: ['1:1', '16:9', '9:16'], maxInputImages: 2, hasPromptExtend: true }
+};
+
+export const ViduQ3Handler = {
+    ...ViduHandler,
+    rules: { resolutions: ['720p', '1080p'], durations: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '16s'], ratios: ['1:1', '16:9', '9:16'], maxInputImages: 2, hasPromptExtend: true }
 };
 
 export const VIDEO_HANDLERS: Record<string, any> = {
@@ -182,6 +202,9 @@ export const VIDEO_HANDLERS: Record<string, any> = {
     
     'Grok video 3': Grok3Handler,
     
-    'Vidu Q2 Pro': ViduHandler,
-    'Vidu Q2 Turbo': ViduHandler
+    'Vidu Q2 Pro': ViduQ2Handler,
+    'Vidu Q2 Turbo': ViduQ2Handler,
+    'Vidu Q3': ViduQ3Handler,
+    'Vidu Q3 Pro': ViduQ3Handler,
+    'Vidu Q3 Turbo': ViduQ3Handler
 };

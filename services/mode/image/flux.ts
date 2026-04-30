@@ -8,6 +8,7 @@ const GPT_IMAGE_2_QUERY_URL_BASE = `${GPT_IMAGE_2_BASE_URL}/v1/tasks`;
 const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
 const IMGBB_API_KEY = '3fcc8e95dc5395ae49bfedcb59302ca1';
 const IMGBB_EXPIRATION_SECONDS = 3600;
+const GPT_IMAGE_2_POLL_INTERVAL_MS = 3000;
 
 const extractGptImage2Urls = (payload: any): string[] => {
     const urls: string[] = [];
@@ -277,11 +278,21 @@ const resolveGptImage2InputImages = async (inputImages: string[]): Promise<strin
     return resolved.filter((src) => !!src && /^https?:\/\//i.test(src));
 };
 
-const pollGptImage2Task = async (taskId: string, config: ModelConfig): Promise<string[]> => {
-    const queryUrl = `${GPT_IMAGE_2_QUERY_URL_BASE}/${encodeURIComponent(taskId)}`;
+const getGptImage2PollAttempts = (size: string): number => {
+    const [width, height] = String(size || '').split('x').map(Number);
+    const longEdge = Math.max(width || 0, height || 0);
 
-    for (let attempts = 0; attempts < 120; attempts++) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (longEdge >= 2800) return 400; // 20 minutes for 4k-class jobs.
+    if (longEdge >= 1900) return 300; // 15 minutes for 2k-class jobs.
+    return 200; // 10 minutes for 1k-class jobs.
+};
+
+const pollGptImage2Task = async (taskId: string, config: ModelConfig, size: string): Promise<string[]> => {
+    const queryUrl = `${GPT_IMAGE_2_QUERY_URL_BASE}/${encodeURIComponent(taskId)}`;
+    const maxAttempts = getGptImage2PollAttempts(size);
+
+    for (let attempts = 0; attempts < maxAttempts; attempts++) {
+        await new Promise((resolve) => setTimeout(resolve, GPT_IMAGE_2_POLL_INTERVAL_MS));
 
         const payload = await fetchGptImage2Json(queryUrl, {
             method: 'GET',
@@ -302,7 +313,7 @@ const pollGptImage2Task = async (taskId: string, config: ModelConfig): Promise<s
         }
     }
 
-    throw new Error("GPT Image 2 generation timed out.");
+    throw new Error(`GPT Image 2 generation timed out after ${Math.round((maxAttempts * GPT_IMAGE_2_POLL_INTERVAL_MS) / 60000)} minutes.`);
 };
 
 export const generateGptImage2 = async (
@@ -389,7 +400,7 @@ export const generateGptImage2 = async (
             throw new Error(`GPT Image 2 did not return task id.${serverMsg ? ` ${serverMsg}` : ''}`);
         }
 
-        return pollGptImage2Task(taskId, config);
+        return pollGptImage2Task(taskId, config, size);
     };
 
     const resultList = await Promise.all(Array.from({ length: normalizedCount }, () => runOne()));

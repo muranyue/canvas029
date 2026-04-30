@@ -122,6 +122,30 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
       defaultEndpoint: '/tencent-vod/v1/aigc-video', 
       defaultQueryEndpoint: '/tencent-vod/v1/query/{task_id}' 
   },
+  'Vidu Q3': {
+      id: 'viduq3',
+      name: 'Vidu Q3',
+      type: 'VIDEO_GEN_VIDU',
+      category: 'VIDEO',
+      defaultEndpoint: '/ent/v2/text2video',
+      defaultQueryEndpoint: '/ent/v2/tasks/{id}/creations'
+  },
+  'Vidu Q3 Pro': {
+      id: 'viduq3-pro',
+      name: 'Vidu Q3 Pro',
+      type: 'VIDEO_GEN_VIDU',
+      category: 'VIDEO',
+      defaultEndpoint: '/ent/v2/text2video',
+      defaultQueryEndpoint: '/ent/v2/tasks/{id}/creations'
+  },
+  'Vidu Q3 Turbo': {
+      id: 'viduq3-turbo',
+      name: 'Vidu Q3 Turbo',
+      type: 'VIDEO_GEN_VIDU',
+      category: 'VIDEO',
+      defaultEndpoint: '/ent/v2/text2video',
+      defaultQueryEndpoint: '/ent/v2/tasks/{id}/creations'
+  },
   
   ...customModels
 };

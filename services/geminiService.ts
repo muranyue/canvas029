@@ -66,7 +66,8 @@ export const generateVideo = async (
     duration: string = "5s",
     count: number = 1,
     promptOptimize: boolean = false,
-    isStartEndMode: boolean = false
+    isStartEndMode: boolean = false,
+    isReferenceMode: boolean = false
 ): Promise<string[]> => {
     let handler = VIDEO_HANDLERS[modelName];
     
@@ -85,7 +86,7 @@ export const generateVideo = async (
     
     try {
         const result = await handler.generate(config, prompt, { 
-            aspectRatio, resolution, duration, inputImages, isStartEndMode, count, promptOptimize 
+            aspectRatio, resolution, duration, inputImages, isStartEndMode, isReferenceMode, count, promptOptimize 
         });
         return Array.isArray(result) ? result : [result];
     } catch (e) {

@@ -271,7 +271,8 @@ export const useNodeOperations = ({
                         node.duration,
                         node.count || 1,
                         false,
-                        node.activeToolbarItem === 'start_end'
+                        node.activeToolbarItem === 'start_end',
+                        node.activeToolbarItem === 'all_reference'
                     );
                 }
 

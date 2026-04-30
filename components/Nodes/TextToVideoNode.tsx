@@ -7,7 +7,14 @@ import { VIDEO_HANDLERS } from '../../services/mode/video/configurations';
 import { getVideoConstraints, getAutoCorrectedVideoSettings } from '../../services/mode/video/rules';
 import { LocalEditableTitle, LocalCustomDropdown, LocalInputThumbnails, LocalMediaStack, LoadingOverlay } from './Shared/LocalNodeComponents';
 
-const videoToolbarItems = [{ id: 'plot', label: 'Plot', icon: Icons.BookOpen }, { id: 'start_end', label: 'Start/End', icon: Icons.ArrowRightLeft }, { id: 'region', label: 'Region', icon: Icons.Scan }, { id: 'camera', label: 'Camera', icon: Icons.Camera }, { id: 'role', label: 'Character', icon: Icons.User }];
+const videoToolbarItems = [
+    { id: 'plot', label: 'Plot', icon: Icons.BookOpen },
+    { id: 'start_end', label: 'Start/End', icon: Icons.ArrowRightLeft },
+    { id: 'all_reference', label: 'All Ref', icon: Icons.Layers },
+    { id: 'region', label: 'Region', icon: Icons.Scan },
+    { id: 'camera', label: 'Camera', icon: Icons.Camera },
+    { id: 'role', label: 'Character', icon: Icons.User }
+];
 
 interface TextToVideoNodeProps {
   data: NodeData;
@@ -452,8 +459,9 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     const inactiveToolbarItemClass = isDark ? 'text-zinc-400 hover:text-gray-200 hover:bg-zinc-800/50' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50';
     const hasResult = !!data.videoSrc && !data.isLoading;
     
-    // Check for Start/End Mode active
+    // Check active special modes
     const isStartEndActive = data.activeToolbarItem === 'start_end';
+    const isAllReferenceActive = data.activeToolbarItem === 'all_reference';
 
     return (
       <>
@@ -504,6 +512,12 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                       <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-bold">
                           <span className="px-1.5 py-0.5 rounded bg-orange-500 text-white text-[9px]">Start/End</span>
                           <span>Ensure two images are input (Start + End frames)</span>
+                      </div>
+                  )}
+                  {isAllReferenceActive && (
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-500 text-[10px] font-bold">
+                          <span className="px-1.5 py-0.5 rounded bg-cyan-500 text-white text-[9px]">All Ref</span>
+                          <span>Use connected images as subjects and reference them with @name in prompt</span>
                       </div>
                   )}
 
