@@ -22,6 +22,27 @@ const SPATIAL_HASH_CELL_SIZE = 1200;
 const MAX_INDEXED_CELLS_PER_NODE = 128;
 const MAX_INDEXED_CELLS_PER_CONNECTION = 128;
 
+interface SpatialBounds {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+}
+
+interface NodeSpatialIndexData {
+    cellMap: Map<string, string[]>;
+    boundsById: Map<string, SpatialBounds & { node: NodeData }>;
+    overflowIds: string[];
+    geometryById: Map<string, SpatialBounds>;
+}
+
+interface ConnectionSpatialIndexData {
+    cellMap: Map<string, string[]>;
+    boundsById: Map<string, SpatialBounds & { conn: Connection }>;
+    overflowIds: string[];
+    geometryById: Map<string, SpatialBounds>;
+}
+
 let canvasDbPromise: Promise<IDBDatabase | null> | null = null;
 
 // Helper to load state safely
@@ -38,6 +59,26 @@ const loadState = <T,>(key: string, fallback: T): T => {
 const isBlobUrl = (url?: string): boolean => !!url && url.startsWith('blob:');
 const isInlineMediaUrl = (url?: string): boolean => !!url && (url.startsWith('data:') || url.startsWith('blob:'));
 const toCellKey = (x: number, y: number) => `${x},${y}`;
+const matchesNodeBounds = (bounds: SpatialBounds | undefined, node: NodeData) =>
+    !!bounds &&
+    bounds.left === node.x &&
+    bounds.top === node.y &&
+    bounds.right === node.x + node.width &&
+    bounds.bottom === node.y + node.height;
+
+const matchesConnectionBounds = (bounds: SpatialBounds | undefined, source: NodeData, target: NodeData) => {
+    if (!bounds) return false;
+
+    const sx = source.x + source.width;
+    const sy = source.y + source.height / 2;
+    const tx = target.x;
+    const ty = target.y + target.height / 2;
+
+    return bounds.left === Math.min(sx, tx) &&
+        bounds.right === Math.max(sx, tx) &&
+        bounds.top === Math.min(sy, ty) &&
+        bounds.bottom === Math.max(sy, ty);
+};
 
 const getCanvasDb = (): Promise<IDBDatabase | null> => {
     if (typeof window === 'undefined' || !window.indexedDB) {
@@ -317,6 +358,8 @@ export const useCanvasState = () => {
     const [suggestedNodes, setSuggestedNodes] = useState<NodeData[]>([]);
 
     const isDark = canvasBg === '#0B0C0E';
+    const nodeSpatialIndexCacheRef = useRef<NodeSpatialIndexData | null>(null);
+    const connectionSpatialIndexCacheRef = useRef<ConnectionSpatialIndexData | null>(null);
     const lastHeavyPersistRef = useRef<{
         nodes: NodeData[];
         connections: Connection[];
@@ -590,9 +633,55 @@ export const useCanvasState = () => {
     }, [connections]);
 
     const nodeSpatialIndex = useMemo(() => {
+        const prevIndex = nodeSpatialIndexCacheRef.current;
+        if (prevIndex && prevIndex.geometryById.size === nodes.length) {
+            let geometryUnchanged = true;
+            let refsUnchanged = true;
+
+            for (const node of nodes) {
+                if (!matchesNodeBounds(prevIndex.geometryById.get(node.id), node)) {
+                    geometryUnchanged = false;
+                    break;
+                }
+
+                if (refsUnchanged && prevIndex.boundsById.get(node.id)?.node !== node) {
+                    refsUnchanged = false;
+                }
+            }
+
+            if (geometryUnchanged) {
+                if (refsUnchanged) {
+                    return prevIndex;
+                }
+
+                const refreshedBoundsById = new Map<string, SpatialBounds & { node: NodeData }>();
+                for (const node of nodes) {
+                    const prevBounds = prevIndex.boundsById.get(node.id);
+                    if (!prevBounds) continue;
+                    refreshedBoundsById.set(node.id, {
+                        left: prevBounds.left,
+                        top: prevBounds.top,
+                        right: prevBounds.right,
+                        bottom: prevBounds.bottom,
+                        node,
+                    });
+                }
+
+                const refreshedIndex: NodeSpatialIndexData = {
+                    cellMap: prevIndex.cellMap,
+                    boundsById: refreshedBoundsById,
+                    overflowIds: prevIndex.overflowIds,
+                    geometryById: prevIndex.geometryById,
+                };
+                nodeSpatialIndexCacheRef.current = refreshedIndex;
+                return refreshedIndex;
+            }
+        }
+
         const cellMap = new Map<string, string[]>();
         const boundsById = new Map<string, { left: number; top: number; right: number; bottom: number; node: NodeData }>();
         const overflowIds: string[] = [];
+        const geometryById = new Map<string, SpatialBounds>();
 
         for (const node of nodes) {
             const left = node.x;
@@ -600,6 +689,7 @@ export const useCanvasState = () => {
             const right = node.x + node.width;
             const bottom = node.y + node.height;
             boundsById.set(node.id, { left, top, right, bottom, node });
+            geometryById.set(node.id, { left, top, right, bottom });
 
             const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
             const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
@@ -625,13 +715,70 @@ export const useCanvasState = () => {
             }
         }
 
-        return { cellMap, boundsById, overflowIds };
+        const nextIndex: NodeSpatialIndexData = { cellMap, boundsById, overflowIds, geometryById };
+        nodeSpatialIndexCacheRef.current = nextIndex;
+        return nextIndex;
     }, [nodes]);
 
     const connectionSpatialIndex = useMemo(() => {
+        const prevIndex = connectionSpatialIndexCacheRef.current;
+        if (prevIndex) {
+            let geometryUnchanged = true;
+            let refsUnchanged = true;
+            let validConnectionCount = 0;
+
+            for (const conn of connections) {
+                const source = nodeById.get(conn.sourceId);
+                const target = nodeById.get(conn.targetId);
+                if (!source || !target) {
+                    geometryUnchanged = false;
+                    break;
+                }
+
+                validConnectionCount += 1;
+                if (!matchesConnectionBounds(prevIndex.geometryById.get(conn.id), source, target)) {
+                    geometryUnchanged = false;
+                    break;
+                }
+
+                if (refsUnchanged && prevIndex.boundsById.get(conn.id)?.conn !== conn) {
+                    refsUnchanged = false;
+                }
+            }
+
+            if (geometryUnchanged && prevIndex.geometryById.size === validConnectionCount) {
+                if (refsUnchanged) {
+                    return prevIndex;
+                }
+
+                const refreshedBoundsById = new Map<string, SpatialBounds & { conn: Connection }>();
+                for (const conn of connections) {
+                    const prevBounds = prevIndex.boundsById.get(conn.id);
+                    if (!prevBounds) continue;
+                    refreshedBoundsById.set(conn.id, {
+                        left: prevBounds.left,
+                        top: prevBounds.top,
+                        right: prevBounds.right,
+                        bottom: prevBounds.bottom,
+                        conn,
+                    });
+                }
+
+                const refreshedIndex: ConnectionSpatialIndexData = {
+                    cellMap: prevIndex.cellMap,
+                    boundsById: refreshedBoundsById,
+                    overflowIds: prevIndex.overflowIds,
+                    geometryById: prevIndex.geometryById,
+                };
+                connectionSpatialIndexCacheRef.current = refreshedIndex;
+                return refreshedIndex;
+            }
+        }
+
         const cellMap = new Map<string, string[]>();
         const boundsById = new Map<string, { left: number; top: number; right: number; bottom: number; conn: Connection }>();
         const overflowIds: string[] = [];
+        const geometryById = new Map<string, SpatialBounds>();
 
         for (const conn of connections) {
             const source = nodeById.get(conn.sourceId);
@@ -648,6 +795,7 @@ export const useCanvasState = () => {
             const top = Math.min(sy, ty);
             const bottom = Math.max(sy, ty);
             boundsById.set(conn.id, { left, top, right, bottom, conn });
+            geometryById.set(conn.id, { left, top, right, bottom });
 
             const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
             const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
@@ -673,8 +821,47 @@ export const useCanvasState = () => {
             }
         }
 
-        return { cellMap, boundsById, overflowIds };
+        const nextIndex: ConnectionSpatialIndexData = { cellMap, boundsById, overflowIds, geometryById };
+        connectionSpatialIndexCacheRef.current = nextIndex;
+        return nextIndex;
     }, [connections, nodeById]);
+
+    const getNodesIntersectingBounds = useCallback((left: number, top: number, right: number, bottom: number) => {
+        const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
+        const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
+        const minCellY = Math.floor(top / SPATIAL_HASH_CELL_SIZE);
+        const maxCellY = Math.floor(bottom / SPATIAL_HASH_CELL_SIZE);
+
+        const seen = new Set<string>();
+        const result: NodeData[] = [];
+
+        const tryPush = (nodeId: string) => {
+            if (seen.has(nodeId)) return;
+            seen.add(nodeId);
+            const bounds = nodeSpatialIndex.boundsById.get(nodeId);
+            if (!bounds) return;
+            if (bounds.right < left ||
+                bounds.left > right ||
+                bounds.bottom < top ||
+                bounds.top > bottom) {
+                return;
+            }
+            result.push(bounds.node);
+        };
+
+        for (let cx = minCellX; cx <= maxCellX; cx++) {
+            for (let cy = minCellY; cy <= maxCellY; cy++) {
+                const ids = nodeSpatialIndex.cellMap.get(toCellKey(cx, cy));
+                if (!ids) continue;
+                for (const id of ids) tryPush(id);
+            }
+        }
+
+        for (const id of nodeSpatialIndex.overflowIds) tryPush(id);
+
+        result.sort((a, b) => (nodeOrderById.get(a.id) || 0) - (nodeOrderById.get(b.id) || 0));
+        return result;
+    }, [nodeSpatialIndex, nodeOrderById]);
 
     // Calculate visible nodes with spatial hash query
     const visibleNodes = useMemo(() => {
@@ -799,6 +986,7 @@ export const useCanvasState = () => {
         visibleNodeIds,
         visibleConnections,
         nodeById,
+        getNodesIntersectingBounds,
         
         // UI state
         previewMedia, setPreviewMedia,

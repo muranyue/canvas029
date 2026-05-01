@@ -45,6 +45,8 @@ interface CanvasStateSetters {
     setCanvasBg: (value: string | ((prev: string) => string)) => void;
     setShowColorPicker: (value: boolean | ((prev: boolean) => boolean)) => void;
     setNextGroupColor: (value: string | ((prev: string) => string)) => void;
+    setDraggingNodeIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+    getNodesIntersectingBounds: (left: number, top: number, right: number, bottom: number) => NodeData[];
     screenToWorld: (x: number, y: number) => Point;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
 }
@@ -74,8 +76,8 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         setNodes, setConnections, setTransform, setDeletedNodes,
         setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
         setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
-        setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor,
-        screenToWorld, updateNodeData,
+        setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor, setDraggingNodeIds,
+        getNodesIntersectingBounds, screenToWorld, updateNodeData,
     } = state;
 
     const {
@@ -86,6 +88,11 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     const pendingTransformRef = useRef<CanvasTransform | null>(null);
     const transformRafRef = useRef<number | null>(null);
     const pendingNodeDragRef = useRef<{ id: string; clientX: number; clientY: number; selection: Set<string> } | null>(null);
+    const pendingNodeDragDeltaRef = useRef<{ dx: number; dy: number } | null>(null);
+    const nodeDragRafRef = useRef<number | null>(null);
+    const dragNodeIndexRef = useRef<Map<string, number> | null>(null);
+    const dragShouldReorderRef = useRef(false);
+    const pendingSingleNodeGroupJoinRef = useRef<string | null>(null);
 
     useEffect(() => {
         transformLiveRef.current = transform;
@@ -106,10 +113,173 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         transformRafRef.current = window.requestAnimationFrame(flushScheduledTransform);
     }, [flushScheduledTransform]);
 
+    const flushScheduledNodeDrag = useCallback(() => {
+        nodeDragRafRef.current = null;
+        const delta = pendingNodeDragDeltaRef.current;
+        pendingNodeDragDeltaRef.current = null;
+        if (!delta) return;
+
+        const movingNodeIds = draggingNodesRef.current;
+        if (movingNodeIds.size === 0) return;
+
+        setNodes(prev => {
+            let idToIndex = dragNodeIndexRef.current;
+            if (!idToIndex || idToIndex.size !== prev.length) {
+                idToIndex = new Map(prev.map((node, idx) => [node.id, idx]));
+                dragNodeIndexRef.current = idToIndex;
+            }
+
+            let missingIndex = false;
+            for (const id of movingNodeIds) {
+                if (!idToIndex.has(id)) {
+                    missingIndex = true;
+                    break;
+                }
+            }
+            if (missingIndex) {
+                idToIndex = new Map(prev.map((node, idx) => [node.id, idx]));
+                dragNodeIndexRef.current = idToIndex;
+            }
+
+            let next: NodeData[] | null = null;
+            for (const id of movingNodeIds) {
+                const idx = idToIndex.get(id);
+                if (idx === undefined) continue;
+
+                const currentNode = prev[idx];
+                const initial = initialNodePositionsRef.current.get(id);
+                if (!currentNode || !initial) continue;
+
+                const nextX = initial.x + delta.dx;
+                const nextY = initial.y + delta.dy;
+                if (currentNode.x === nextX && currentNode.y === nextY) continue;
+
+                if (!next) next = prev.slice();
+                next[idx] = { ...currentNode, x: nextX, y: nextY };
+            }
+
+            return next ?? prev;
+        });
+    }, [draggingNodesRef, initialNodePositionsRef, setNodes]);
+
+    const scheduleNodeDrag = useCallback((dx: number, dy: number) => {
+        pendingNodeDragDeltaRef.current = { dx, dy };
+        if (nodeDragRafRef.current !== null) return;
+        nodeDragRafRef.current = window.requestAnimationFrame(flushScheduledNodeDrag);
+    }, [flushScheduledNodeDrag]);
+
+    const cancelScheduledNodeDrag = useCallback(() => {
+        pendingNodeDragDeltaRef.current = null;
+        dragNodeIndexRef.current = null;
+        if (nodeDragRafRef.current !== null) {
+            window.cancelAnimationFrame(nodeDragRafRef.current);
+            nodeDragRafRef.current = null;
+        }
+    }, []);
+
+    const flushNodeDragNow = useCallback(() => {
+        if (nodeDragRafRef.current !== null) {
+            window.cancelAnimationFrame(nodeDragRafRef.current);
+            nodeDragRafRef.current = null;
+        }
+        if (pendingNodeDragDeltaRef.current) {
+            flushScheduledNodeDrag();
+        }
+    }, [flushScheduledNodeDrag]);
+
+    const commitSingleNodeGroupJoin = useCallback(() => {
+        const draggedNodeId = pendingSingleNodeGroupJoinRef.current;
+        pendingSingleNodeGroupJoinRef.current = null;
+        if (!draggedNodeId) return;
+
+        setNodes(prev => {
+            const draggedIndex = prev.findIndex(node => node.id === draggedNodeId);
+            if (draggedIndex === -1) return prev;
+
+            const draggedNode = prev[draggedIndex];
+            if (draggedNode.type === NodeType.GROUP) return prev;
+
+            const containingGroups = prev
+                .map((node, index) => ({ node, index }))
+                .filter(({ node }) => node.type === NodeType.GROUP && node.id !== draggedNodeId)
+                .filter(({ node }) =>
+                    draggedNode.x >= node.x &&
+                    draggedNode.x + draggedNode.width <= node.x + node.width &&
+                    draggedNode.y >= node.y &&
+                    draggedNode.y + draggedNode.height <= node.y + node.height
+                );
+
+            if (containingGroups.length === 0) return prev;
+
+            containingGroups.sort((a, b) => {
+                if (a.index !== b.index) return b.index - a.index;
+                return (a.node.width * a.node.height) - (b.node.width * b.node.height);
+            });
+
+            const targetGroup = containingGroups[0].node;
+            const targetGroupIndex = containingGroups[0].index;
+            let insertAfter = targetGroupIndex;
+
+            for (let i = targetGroupIndex + 1; i < prev.length; i++) {
+                const node = prev[i];
+                if (node.id === draggedNodeId) continue;
+                const isInsideTargetGroup =
+                    node.x >= targetGroup.x &&
+                    node.x + node.width <= targetGroup.x + targetGroup.width &&
+                    node.y >= targetGroup.y &&
+                    node.y + node.height <= targetGroup.y + targetGroup.height;
+
+                if (isInsideTargetGroup) {
+                    insertAfter = i;
+                }
+            }
+
+            const next = prev.slice();
+            const [movedNode] = next.splice(draggedIndex, 1);
+            let insertIndex = insertAfter + 1;
+            if (draggedIndex < insertIndex) insertIndex -= 1;
+
+            if (insertIndex === draggedIndex) return prev;
+
+            next.splice(insertIndex, 0, movedNode);
+            return next;
+        });
+    }, [setNodes]);
+
+    const commitDraggedNodeReorder = useCallback(() => {
+        const shouldReorder = dragShouldReorderRef.current;
+        dragShouldReorderRef.current = false;
+        if (!shouldReorder) return;
+
+        const nodesToDrag = draggingNodesRef.current;
+        if (nodesToDrag.size === 0) return;
+
+        setNodes(prev => {
+            const movingNodes = prev.filter(node => nodesToDrag.has(node.id));
+            if (movingNodes.length === 0) return prev;
+
+            const others = prev.filter(node => !nodesToDrag.has(node.id));
+            movingNodes.sort((a, b) => {
+                if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
+                if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
+                return 0;
+            });
+
+            const next = [...others, ...movingNodes];
+            for (let i = 0; i < prev.length; i++) {
+                if (prev[i] !== next[i]) return next;
+            }
+            return prev;
+        });
+    }, [draggingNodesRef, setNodes]);
+
     useEffect(() => {
         return () => {
             if (transformRafRef.current !== null) {
                 window.cancelAnimationFrame(transformRafRef.current);
+            }
+            if (nodeDragRafRef.current !== null) {
+                window.cancelAnimationFrame(nodeDragRafRef.current);
             }
         };
     }, []);
@@ -361,14 +531,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 const touch = e.touches[0];
                 const dx = (touch.clientX - dragStartRef.current.x) / transform.k;
                 const dy = (touch.clientY - dragStartRef.current.y) / transform.k;
-                const movingNodeIds = draggingNodesRef.current;
-                setNodes(prev => prev.map(n => {
-                    if (movingNodeIds.has(n.id)) {
-                        const initial = initialNodePositionsRef.current.get(n.id);
-                        if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy };
-                    }
-                    return n;
-                }));
+                scheduleNodeDrag(dx, dy);
             } else if (dragMode === 'CONNECT') {
                 const touch = e.touches[0];
                 setTempConnection(screenToWorld(touch.clientX, touch.clientY));
@@ -389,7 +552,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 scheduleTransform({ x: cx - worldX * newK, y: cy - worldY * newK, k: newK });
             }
         }
-    }, [dragMode, transform, screenToWorld, scheduleTransform, setNodes, setTempConnection, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, touchStartRef, nodes]);
+    }, [dragMode, transform, screenToWorld, scheduleTransform, scheduleNodeDrag, setTempConnection, containerRef, dragStartRef, initialTransformRef, touchStartRef, nodes]);
 
     const handleTouchEnd = useCallback((e: any) => {
         pendingNodeDragRef.current = null;
@@ -413,13 +576,18 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 });
             }
         }
+        flushNodeDragNow();
+        commitDraggedNodeReorder();
         setDragMode('NONE');
+        cancelScheduledNodeDrag();
         touchStartRef.current = null;
         setTempConnection(null);
         connectionStartRef.current = null;
         setSuggestedNodes([]);
+        commitSingleNodeGroupJoin();
         draggingNodesRef.current.clear();
-    }, [dragMode, nodes, screenToWorld, createConnection, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, connectionStartRef, touchStartRef, draggingNodesRef]);
+        setDraggingNodeIds(new Set());
+    }, [dragMode, nodes, screenToWorld, createConnection, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, touchStartRef, draggingNodesRef, setDraggingNodeIds]);
 
     // ========== Mouse Events ==========
     const handleMouseDown = useCallback((e: any) => {
@@ -452,7 +620,18 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     const handleMouseMove = useCallback((e: any) => {
         lastMousePosRef.current = { x: e.clientX, y: e.clientY };
         const worldPos = screenToWorld(e.clientX, e.clientY);
-        if (dragMode !== 'NONE' && e.buttons === 0) { setDragMode('NONE'); dragStartRef.current = { x: 0, y: 0 }; return; }
+        if (dragMode !== 'NONE' && e.buttons === 0) {
+            flushNodeDragNow();
+            commitDraggedNodeReorder();
+            commitSingleNodeGroupJoin();
+            setDragMode('NONE');
+            dragStartRef.current = { x: 0, y: 0 };
+            cancelScheduledNodeDrag();
+            draggingNodesRef.current.clear();
+            dragShouldReorderRef.current = false;
+            setDraggingNodeIds(new Set());
+            return;
+        }
 
         if (pendingNodeDragRef.current && dragMode === 'NONE' && (e.buttons & 1) === 1) {
             const pending = pendingNodeDragRef.current;
@@ -470,14 +649,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         } else if (dragMode === 'DRAG_NODE') {
             const dx = (e.clientX - dragStartRef.current.x) / transform.k;
             const dy = (e.clientY - dragStartRef.current.y) / transform.k;
-            const movingNodeIds = draggingNodesRef.current;
-            setNodes(prev => prev.map(n => {
-                if (movingNodeIds.has(n.id)) {
-                    const initial = initialNodePositionsRef.current.get(n.id);
-                    if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy };
-                }
-                return n;
-            }));
+            scheduleNodeDrag(dx, dy);
         } else if (dragMode === 'SELECT') {
             const x = Math.min(dragStartRef.current.x, e.clientX);
             const y = Math.min(dragStartRef.current.y, e.clientY);
@@ -525,7 +697,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 }
             }
         }
-    }, [dragMode, transform, nodes, screenToWorld, setDragMode, scheduleTransform, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, connectionStartRef, lastMousePosRef]);
+    }, [dragMode, transform, nodes, screenToWorld, setDragMode, scheduleTransform, scheduleNodeDrag, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, commitSingleNodeGroupJoin, cancelScheduledNodeDrag, containerRef, dragStartRef, initialTransformRef, connectionStartRef, lastMousePosRef, draggingNodesRef, setDraggingNodeIds]);
 
     const handleMouseUp = useCallback((e: any) => {
         pendingNodeDragRef.current = null;
@@ -533,10 +705,14 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             setQuickAddMenu({ sourceId: connectionStartRef.current.nodeId, x: e.clientX, y: e.clientY, worldX: screenToWorld(e.clientX, e.clientY).x, worldY: screenToWorld(e.clientX, e.clientY).y });
         }
         if (dragMode !== 'NONE') {
+            flushNodeDragNow();
+            commitDraggedNodeReorder();
+            cancelScheduledNodeDrag();
             setDragMode('NONE'); setTempConnection(null); connectionStartRef.current = null;
-            setSuggestedNodes([]); setSelectionBox(null); draggingNodesRef.current.clear();
+            setSuggestedNodes([]); setSelectionBox(null); commitSingleNodeGroupJoin(); draggingNodesRef.current.clear();
+            setDraggingNodeIds(new Set());
         }
-    }, [dragMode, screenToWorld, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox, connectionStartRef, draggingNodesRef]);
+    }, [dragMode, screenToWorld, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, draggingNodesRef, setDraggingNodeIds]);
 
     // ========== Node Events ==========
     const isExcludedTarget = (target: HTMLElement) => {
@@ -593,51 +769,54 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         setDragMode('DRAG_NODE');
         dragStartRef.current = { x: clientX, y: clientY };
         const newSelection = selection;
+        cancelScheduledNodeDrag();
 
         const nodesToDrag = new Set(newSelection);
         const primaryNode = nodes.find(n => n.id === id);
-        const groupIds = Array.from(newSelection).filter(nid => nodes.find(n => n.id === nid)?.type === NodeType.GROUP);
+        const nodeById = new Map(nodes.map(n => [n.id, n]));
+        const groupIds = Array.from(newSelection).filter(nid => nodeById.get(nid)?.type === NodeType.GROUP);
 
         if (groupIds.length > 0) {
             const idToIndex = new Map(nodes.map((n, i) => [n.id, i]));
-            nodes.forEach(n => {
-                if (nodesToDrag.has(n.id) || n.type === NodeType.GROUP) return;
-                for (const gid of groupIds) {
-                    const group = nodes.find(g => g.id === gid);
-                    if (group) {
-                        const isInside = n.x >= group.x && n.x + n.width <= group.x + group.width &&
-                            n.y >= group.y && n.y + n.height <= group.y + group.height;
-                        const groupIdx = idToIndex.get(gid)!;
-                        const nodeIdx = idToIndex.get(n.id)!;
-                        if (isInside && nodeIdx > groupIdx) { nodesToDrag.add(n.id); break; }
+            const groups = groupIds
+                .map(gid => {
+                    const group = nodeById.get(gid);
+                    if (!group) return null;
+                    return {
+                        x: group.x,
+                        y: group.y,
+                        right: group.x + group.width,
+                        bottom: group.y + group.height,
+                        index: idToIndex.get(gid) ?? -1,
+                    };
+                })
+                .filter((group): group is { x: number; y: number; right: number; bottom: number; index: number } => group !== null);
+
+            for (const group of groups) {
+                const candidates = getNodesIntersectingBounds(group.x, group.y, group.right, group.bottom);
+                for (const n of candidates) {
+                    if (nodesToDrag.has(n.id) || n.type === NodeType.GROUP) continue;
+                    const nodeIdx = idToIndex.get(n.id) ?? -1;
+                    const isInside = n.x >= group.x && n.x + n.width <= group.right &&
+                        n.y >= group.y && n.y + n.height <= group.bottom;
+                    if (isInside && nodeIdx > group.index) {
+                        nodesToDrag.add(n.id);
                     }
                 }
-            });
+            }
         }
         draggingNodesRef.current = nodesToDrag;
+        setDraggingNodeIds(new Set(nodesToDrag));
 
         const shouldReorder =
             newSelection.size > 1 ||
             groupIds.length > 0 ||
             primaryNode?.type === NodeType.GROUP;
-
-        if (shouldReorder) {
-            setNodes(prev => {
-                const movingNodes = prev.filter(n => nodesToDrag.has(n.id));
-                const others = prev.filter(n => !nodesToDrag.has(n.id));
-                movingNodes.sort((a, b) => {
-                    if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
-                    if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
-                    return 0;
-                });
-                const next = [...others, ...movingNodes];
-
-                for (let i = 0; i < prev.length; i++) {
-                    if (prev[i] !== next[i]) return next;
-                }
-                return prev;
-            });
-        }
+        dragShouldReorderRef.current = shouldReorder;
+        pendingSingleNodeGroupJoinRef.current =
+            newSelection.size === 1 && primaryNode?.type !== NodeType.GROUP
+                ? id
+                : null;
 
         if (newSelection.size === 1) {
             const node = nodes.find(n => n.id === id);
@@ -646,7 +825,11 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             }
         }
 
-        initialNodePositionsRef.current = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+        initialNodePositionsRef.current = new Map(
+            nodes
+                .filter(n => nodesToDrag.has(n.id))
+                .map(n => [n.id, { x: n.x, y: n.y }])
+        );
     };
 
     const handleNodeMouseDown = useCallback((e: any, id: string) => {
@@ -659,7 +842,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             const selection = updateSelectionForPointerDown(id, e.shiftKey);
             pendingNodeDragRef.current = { id, clientX: e.clientX, clientY: e.clientY, selection };
         }
-    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
+    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, getNodesIntersectingBounds, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
 
     const handleNodeTouchStart = useCallback((e: any, id: string) => {
         const target = e.target as HTMLElement;
@@ -763,7 +946,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         // Touch
         handleTouchStart, handleTouchMove, handleTouchEnd,
         // Mouse
-        handleMouseDown, handleMouseMove, handleMouseUp,
+        handleMouseDown, handleMouseMove, handleMouseUp, commitDraggedNodeReorder,
         // Node
         handleNodeMouseDown, handleNodeTouchStart, handleNodeTouchEnd, handleNodeClick,
         handleNodeContextMenu, handleCanvasContextMenu, handleCanvasDoubleClick,

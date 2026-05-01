@@ -49,6 +49,7 @@ const CanvasWithSidebar: React.FC = () => {
     const touchStartRef = useRef<{ x: number; y: number; dist: number; centerX: number; centerY: number } | null>(null);
     const [isSd2AssetLibraryOpen, setIsSd2AssetLibraryOpen] = useState(false);
     const [renderModeOverride, setRenderModeOverride] = useState<'AUTO' | 'FULL' | 'CULL'>('AUTO');
+    const [draggingNodeIds, setDraggingNodeIds] = useState<Set<string>>(new Set());
 
     // ========== Canvas State ==========
     const canvasState = useCanvasState();
@@ -58,6 +59,7 @@ const CanvasWithSidebar: React.FC = () => {
         selectedNodeIds, setSelectedNodeIds, selectedConnectionId, setSelectedConnectionId,
         selectionBox, setSelectionBox, dragMode, setDragMode, dragModeRef,
         viewportSize, setViewportSize, visibleNodes, visibleConnections, nodeById,
+        getNodesIntersectingBounds,
         previewMedia, setPreviewMedia, contextMenu, setContextMenu,
         quickAddMenu, setQuickAddMenu, showNewWorkflowDialog, setShowNewWorkflowDialog,
         isSettingsOpen, setIsSettingsOpen, showMinimap,
@@ -129,7 +131,8 @@ const CanvasWithSidebar: React.FC = () => {
             setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
             setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
             setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor,
-            screenToWorld, updateNodeData,
+            setDraggingNodeIds,
+            getNodesIntersectingBounds, screenToWorld, updateNodeData,
         },
         ops: {
             addNode, generateId, createConnection,
@@ -165,16 +168,18 @@ const CanvasWithSidebar: React.FC = () => {
     }, [setViewportSize]);
 
     useEffect(() => {
-        const handleGlobalMouseUp = () => {
+        const handleGlobalMouseUp = (e: MouseEvent) => {
+            const target = e.target;
+            if (containerRef.current && target instanceof Node && containerRef.current.contains(target)) {
+                return;
+            }
             if (dragModeRef.current !== 'NONE') {
-                setDragMode('NONE'); setTempConnection(null); connectionStartRef.current = null;
-                dragStartRef.current = { x: 0, y: 0 }; setSuggestedNodes([]); setSelectionBox(null);
-                draggingNodesRef.current.clear();
+                handlers.handleMouseUp(e as any);
             }
         };
         window.addEventListener('mouseup', handleGlobalMouseUp);
         return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-    }, [dragModeRef, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox]);
+    }, [dragModeRef, handlers]);
 
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
@@ -237,6 +242,7 @@ const CanvasWithSidebar: React.FC = () => {
                 selectedConnectionId={selectedConnectionId}
                 selectionBox={selectionBox}
                 dragMode={dragMode}
+                draggingNodeIds={draggingNodeIds}
                 tempConnection={tempConnection}
                 suggestedNodes={suggestedNodes}
                 showMinimap={showMinimap}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NodeData, CanvasTransform, Point, NodeType } from '../types';
 import BaseNode from './Nodes/BaseNode';
 import { NodeContent } from './Nodes/NodeContent';
@@ -117,7 +117,6 @@ interface CanvasAreaProps {
     // Refs
     containerRef: React.RefObject<HTMLDivElement | null>;
     connectionStartRef: React.MutableRefObject<{ nodeId: string; type: 'source' | 'target' } | null>;
-    spacePressed: React.MutableRefObject<boolean>;
     // State
     nodes: NodeData[];
     visibleNodes: NodeData[];
@@ -129,6 +128,7 @@ interface CanvasAreaProps {
     selectedConnectionId: string | null;
     selectionBox: { x: number; y: number; w: number; h: number } | null;
     dragMode: string;
+    draggingNodeIds: Set<string>;
     tempConnection: Point | null;
     suggestedNodes: NodeData[];
     showMinimap: boolean;
@@ -185,10 +185,10 @@ interface CanvasAreaProps {
 }
 
 const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
-    containerRef, connectionStartRef, spacePressed,
+    containerRef, connectionStartRef,
     nodes, visibleNodes, visibleConnections, nodeById, transform, canvasBg,
     selectedNodeIds, selectedConnectionId, selectionBox, dragMode,
-    tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
+    draggingNodeIds, tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
     viewportSize, isDark,
     getInputImages, updateNodeData, handleGenerate, handleMaximize, handleDownload, handleUploadToAssetLibrary,
     handleToolbarAction, handleUpload, deleteNode, setPreviewMedia, setSelectedConnectionId, setShowColorPicker,
@@ -213,6 +213,25 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
     const groupToolbarPos = showGroupToolbar ? getSelectionCenter(transform) : null;
     const isSelecting = dragMode === 'SELECT' || dragMode === 'DRAG_NODE';
     const [activeControlNodeId, setActiveControlNodeId] = useState<string | null>(null);
+    const renderedNodeList = useMemo(() => {
+        if (draggingNodeIds.size === 0) return visibleNodes;
+
+        const dragging: NodeData[] = [];
+        const others: NodeData[] = [];
+        for (const node of visibleNodes) {
+            if (draggingNodeIds.has(node.id)) dragging.push(node);
+            else others.push(node);
+        }
+        if (dragging.length === 0) return visibleNodes;
+
+        dragging.sort((a, b) => {
+            if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
+            if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
+            return 0;
+        });
+
+        return [...others, ...dragging];
+    }, [visibleNodes, draggingNodeIds]);
 
     useEffect(() => {
         if (!singleSelectedNodeId || dragMode !== 'NONE') {
@@ -304,7 +323,7 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}
             >
                 {/* Nodes */}
-                {visibleNodes.map(node => {
+                {renderedNodeList.map(node => {
                     const isNodeSelected = selectedNodeIds.has(node.id);
                     return (
                         <CanvasNodeItem
@@ -410,6 +429,7 @@ export const CanvasArea = React.memo(CanvasAreaComponent, (prev, next) => {
     if (prev.visibleNodes !== next.visibleNodes) return false;
     if (prev.visibleConnections !== next.visibleConnections) return false;
     if (prev.selectedNodeIds !== next.selectedNodeIds) return false;
+    if (prev.draggingNodeIds !== next.draggingNodeIds) return false;
     if (prev.selectedConnectionId !== next.selectedConnectionId) return false;
     if (prev.dragMode !== next.dragMode) return false;
     if (prev.tempConnection !== next.tempConnection) return false;
