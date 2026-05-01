@@ -5,6 +5,7 @@ import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
 import { VIDEO_HANDLERS } from '../../services/mode/video/configurations';
 import { getVideoConstraints, getAutoCorrectedVideoSettings } from '../../services/mode/video/rules';
+import { loadSd2AssetLibrary, type Sd2AssetItem } from '../../services/mode/video/sd2Assets';
 import { LocalEditableTitle, LocalCustomDropdown, LocalInputThumbnails, LocalMediaStack, LoadingOverlay } from './Shared/LocalNodeComponents';
 
 const videoToolbarItems = [
@@ -16,6 +17,71 @@ const videoToolbarItems = [
     { id: 'role', label: 'Character', icon: Icons.User }
 ];
 
+const SD2_MODEL_SET = new Set(['SD 2.0 Fast', 'SD 2.0 Pro']);
+
+const extractTrailingAssetMention = (prompt: string): { query: string; start: number; end: number } | null => {
+    const text = String(prompt || '');
+    const match = text.match(/(^|\s)@([^\s@]*)$/);
+    if (!match || typeof match.index !== 'number') return null;
+
+    const leading = match[1] || '';
+    const query = match[2] || '';
+    const start = match.index + leading.length;
+    return { query, start, end: text.length };
+};
+
+const replaceTrailingAssetMentionWithAssetUri = (prompt: string, assetId: string): string => {
+    const text = String(prompt || '');
+    const mention = extractTrailingAssetMention(text);
+    const replacement = `asset://${assetId}`;
+
+    if (!mention) {
+        if (!text.trim()) return `${replacement} `;
+        return `${text}${text.endsWith(' ') ? '' : ' '}${replacement} `;
+    }
+
+    return `${text.slice(0, mention.start)}${replacement} `;
+};
+
+const getSdAssetPreviewUrl = (asset: Sd2AssetItem): string => {
+    const type = String(asset.assetType || '').toLowerCase();
+    const candidates =
+        type === 'image'
+            ? [asset.localPreviewUrl, asset.previewUrl, asset.sourceUrl]
+            : [asset.localPreviewUrl, asset.previewUrl];
+    for (const candidate of candidates) {
+        const value = String(candidate || '').trim();
+        if (value) return value;
+    }
+    return '';
+};
+
+const getLastPathName = (value: string): string => {
+    try {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const parsed = raw.startsWith('http://') || raw.startsWith('https://') ? new URL(raw) : null;
+        const path = parsed ? parsed.pathname : raw;
+        const segment = path.split('/').filter(Boolean).pop() || '';
+        return decodeURIComponent(segment);
+    } catch (_err) {
+        return '';
+    }
+};
+
+const getSdAssetDisplayName = (asset: Sd2AssetItem, index: number): string => {
+    const localName = String(asset.localFileName || '').trim();
+    if (localName) return localName;
+
+    const fromSource = getLastPathName(String(asset.sourceUrl || ''));
+    if (fromSource) return fromSource;
+
+    const fromPreview = getLastPathName(String(asset.previewUrl || ''));
+    if (fromPreview) return fromPreview;
+
+    return `Asset ${index + 1}`;
+};
+
 interface TextToVideoNodeProps {
   data: NodeData;
   updateData: (id: string, updates: Partial<NodeData>) => void;
@@ -25,6 +91,7 @@ interface TextToVideoNodeProps {
   inputs?: { src: string, isVideo: boolean }[];
   onMaximize?: (id: string) => void;
   onDownload?: (id: string) => void;
+  onUploadToAssetLibrary?: (id: string) => void;
   onDelete?: (id: string) => void;
   onToolbarAction?: (nodeId: string, action: string) => void;
   isDark?: boolean;
@@ -304,16 +371,19 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
 ContentEditablePromptInput.displayName = 'ContentEditablePromptInput';
 
 export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
-    data, updateData, onGenerate, selected, showControls, inputs = [], onMaximize, onDownload, onDelete, onToolbarAction, isDark = true, isSelecting
+    data, updateData, onGenerate, selected, showControls, inputs = [], onMaximize, onDownload, onUploadToAssetLibrary, onDelete, onToolbarAction, isDark = true, isSelecting
 }) => {
     const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
     const [deferredInputs, setDeferredInputs] = useState(false);
     const [progress, setProgress] = useState(0);
     const [isConfigured, setIsConfigured] = useState(true);
     const [videoModels, setVideoModels] = useState<string[]>([]);
+    const [assetMentionQuery, setAssetMentionQuery] = useState<string | null>(null);
+    const [sdAssetSuggestions, setSdAssetSuggestions] = useState<Sd2AssetItem[]>([]);
     
     const inputRef = useRef<PromptInputHandle>(null);
     const isSelectedAndStable = selected && !isSelecting;
+    const isSd2Model = SD2_MODEL_SET.has(data.model || 'Sora 2');
 
     const checkConfig = useCallback(() => {
          const mName = data.model || 'Sora 2';
@@ -344,7 +414,8 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
             'Hailuo': [],
             'Veo': [],
             'Wan': [],
-            'Vidu': []
+            'Vidu': [],
+            'SD 2.0': []
         };
         const ungrouped: string[] = [];
         
@@ -360,6 +431,8 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                  groups['Wan'].push(m);
             } else if (m.startsWith('Vidu')) {
                  groups['Vidu'].push(m);
+            } else if (m.startsWith('SD 2.0')) {
+                 groups['SD 2.0'].push(m);
             } else {
                  ungrouped.push(m);
             }
@@ -374,14 +447,74 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
 
     useEffect(() => { if (isSelectedAndStable && showControls) { const t = setTimeout(() => setDeferredInputs(true), 100); return () => clearTimeout(t); } else setDeferredInputs(false); }, [isSelectedAndStable, showControls]);
     useEffect(() => { let interval: any; if (data.isLoading) { setProgress(0); interval = setInterval(() => { setProgress(prev => (prev >= 95 ? 95 : prev + Math.max(0.5, (95 - prev) / 20))); }, 200); } else setProgress(0); return () => clearInterval(interval); }, [data.isLoading]);
+    useEffect(() => {
+        if (!isSd2Model) {
+            setAssetMentionQuery(null);
+            setSdAssetSuggestions([]);
+        }
+    }, [isSd2Model]);
+
+    const handlePromptChange = useCallback((value: string) => {
+        updateData(data.id, { prompt: value });
+
+        if (!isSd2Model) {
+            setAssetMentionQuery(null);
+            setSdAssetSuggestions([]);
+            return;
+        }
+
+        const mention = extractTrailingAssetMention(value);
+        if (!mention) {
+            setAssetMentionQuery(null);
+            setSdAssetSuggestions([]);
+            return;
+        }
+
+        const query = mention.query.trim().toLowerCase();
+        const library = loadSd2AssetLibrary();
+        const filtered = query
+            ? library.filter((item) => {
+                const searchPool = [
+                    item.assetId,
+                    item.localFileName,
+                    item.sourceUrl,
+                    item.previewUrl,
+                    item.assetType,
+                    item.status
+                ]
+                    .map((value) => String(value || '').toLowerCase())
+                    .filter(Boolean);
+                return searchPool.some((value) => value.includes(query));
+            })
+            : library;
+
+        setAssetMentionQuery(mention.query);
+        setSdAssetSuggestions(filtered.slice(0, 8));
+    }, [data.id, isSd2Model, updateData]);
+
+    const handleAssetSuggestionSelect = useCallback((assetId: string) => {
+        const nextPrompt = replaceTrailingAssetMentionWithAssetUri(data.prompt || '', assetId);
+        updateData(data.id, { prompt: nextPrompt });
+        setAssetMentionQuery(null);
+        setSdAssetSuggestions([]);
+    }, [data.id, data.prompt, updateData]);
 
     const handleRatioChange = (ratio: string) => {
+        if (!ratio.includes(':')) {
+            updateData(data.id, { aspectRatio: ratio });
+            return;
+        }
+
         const currentShort = Math.min(data.width, data.height);
         const baseSize = Math.max(currentShort, 400); // Preserve current scale, min 400px
 
         const [wStr, hStr] = ratio.split(':');
         const wR = parseFloat(wStr);
         const hR = parseFloat(hStr);
+        if (!Number.isFinite(wR) || !Number.isFinite(hR) || hR <= 0) {
+            updateData(data.id, { aspectRatio: ratio });
+            return;
+        }
         const r = wR / hR;
 
         let newW, newH;
@@ -458,6 +591,9 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     const activeToolbarItemClass = isDark ? 'bg-zinc-800 text-cyan-400 border-zinc-600' : 'bg-cyan-50 text-cyan-600 border-cyan-100';
     const inactiveToolbarItemClass = isDark ? 'text-zinc-400 hover:text-gray-200 hover:bg-zinc-800/50' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50';
     const hasResult = !!data.videoSrc && !data.isLoading;
+    const canUploadToAssetLibrary = !!data.videoSrc;
+    const isUploadingAsset = !!data.isUploadingAsset;
+    const shouldShowSdAssetSuggestions = isSd2Model && assetMentionQuery !== null;
     
     // Check active special modes
     const isStartEndActive = data.activeToolbarItem === 'start_end';
@@ -486,6 +622,7 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
            <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} onMouseDown={(e) => e.stopPropagation()} data-interactive="true">
                <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12} /></button>
                <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDownload?.(data.id); }} data-interactive="true"><Icons.Download size={12} /></button>
+               <button title={isUploadingAsset ? "Uploading..." : "Upload Asset"} className={`p-1 rounded transition-colors ${(isUploadingAsset || !canUploadToAssetLibrary) ? (isDark ? 'text-zinc-600 cursor-not-allowed' : 'text-gray-300 cursor-not-allowed') : (isDark ? 'hover:bg-zinc-800 hover:text-cyan-300 text-zinc-300' : 'hover:bg-gray-200 hover:text-cyan-600 text-gray-500')}`} onClick={(e) => { e.stopPropagation(); if (!isUploadingAsset && canUploadToAssetLibrary) onUploadToAssetLibrary?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); if (!isUploadingAsset && canUploadToAssetLibrary) onUploadToAssetLibrary?.(data.id); }} disabled={isUploadingAsset || !canUploadToAssetLibrary} data-interactive="true">{isUploadingAsset ? <Icons.Loader2 size={12} className="animate-spin" /> : <Icons.Album size={12} />}</button>
                <button title="Delete" className={`p-1 rounded transition-colors text-red-400 xl:hidden ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`} onClick={(e) => { e.stopPropagation(); onDelete?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete?.(data.id); }} data-interactive="true"><Icons.Trash2 size={12} /></button>
            </div>
         </div>
@@ -525,10 +662,60 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                       <ContentEditablePromptInput 
                           ref={inputRef}
                           value={data.prompt || ''} 
-                          onChange={(val) => updateData(data.id, { prompt: val })} 
+                          onChange={handlePromptChange}
                           isDark={isDark}
                           placeholder="Describe the video scene..."
                       />
+                      {shouldShowSdAssetSuggestions && (
+                          <div
+                              className={`mt-2 rounded-lg border overflow-hidden ${isDark ? 'bg-zinc-900/90 border-zinc-700' : 'bg-white border-gray-200'}`}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
+                              data-interactive="true"
+                          >
+                              <div className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${isDark ? 'text-zinc-400 border-b border-zinc-800' : 'text-gray-500 border-b border-gray-100'}`}>
+                                  SD 2.0 Assets
+                              </div>
+                              {sdAssetSuggestions.length > 0 ? (
+                                  <div className="max-h-36 overflow-y-auto">
+                                      {sdAssetSuggestions.map((asset, index) => (
+                                          <button
+                                              key={asset.assetId}
+                                              type="button"
+                                              onClick={() => handleAssetSuggestionSelect(asset.assetId)}
+                                              className={`w-full text-left px-2 py-1.5 text-[11px] transition-colors flex items-center gap-2 ${isDark ? 'hover:bg-zinc-800 text-zinc-200' : 'hover:bg-gray-50 text-gray-800'}`}
+                                              data-interactive="true"
+                                          >
+                                              <div className={`w-10 h-10 rounded-md overflow-hidden border shrink-0 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'}`}>
+                                                  {getSdAssetPreviewUrl(asset) ? (
+                                                      <img
+                                                          src={getSdAssetPreviewUrl(asset)}
+                                                          alt="asset preview"
+                                                          className="w-full h-full object-cover"
+                                                          loading="lazy"
+                                                      />
+                                                  ) : (
+                                                      <div className={`w-full h-full flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                                          <Icons.Image size={14} />
+                                                      </div>
+                                                  )}
+                                              </div>
+                                              <div className="min-w-0">
+                                                  <div className="font-semibold truncate">{getSdAssetDisplayName(asset, index)}</div>
+                                                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                                                      {(asset.assetType || 'Unknown')} - {(asset.status || 'Unknown')}
+                                                  </div>
+                                              </div>
+                                          </button>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <div className={`px-2 py-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                                      No matching assets
+                                  </div>
+                              )}
+                          </div>
+                      )}
                       
                       {/* Image/Video Token Insertion Buttons - Moved Below Input to Separate Line */}
                       {inputs.length > 0 && (

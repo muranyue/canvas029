@@ -1,7 +1,7 @@
 
 import { VideoModelRules, VideoConstraints } from "../types";
 
-export const videoModels = ['Sora 2', 'Veo 3.1 Fast', 'Veo 3.1 Pro', 'Hailuo 2.0', 'Hailuo 2.3', 'Kling O1 Std', 'Kling O1 Pro', 'Jmeng 3.5', 'Kling 2.6 ProNS', 'Kling 2.6 ProYS', 'Kling 2.5 Std', 'Kling 2.5 Pro', 'Wan2.6', 'Wan2.5', 'Doubao Video', 'Grok video 3', 'Vidu Q2 Pro', 'Vidu Q2 Turbo', 'Vidu Q3', 'Vidu Q3 Pro', 'Vidu Q3 Turbo'];
+export const videoModels = ['Sora 2', 'Veo 3.1 Fast', 'Veo 3.1 Pro', 'Hailuo 2.0', 'Hailuo 2.3', 'Kling O1 Std', 'Kling O1 Pro', 'Jmeng 3.5', 'Kling 2.6 ProNS', 'Kling 2.6 ProYS', 'Kling 2.5 Std', 'Kling 2.5 Pro', 'Wan2.6', 'Wan2.5', 'Doubao Video', 'Grok video 3', 'Vidu Q2 Pro', 'Vidu Q2 Turbo', 'Vidu Q3', 'Vidu Q3 Pro', 'Vidu Q3 Turbo', 'SD 2.0 Fast', 'SD 2.0 Pro'];
 export const videoDurations = ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '16s', '25s'];
 
 export const getVideoConstraints = (modelName: string, resolution: string | undefined, duration: string | undefined, inputCount: number): VideoConstraints => {
@@ -17,6 +17,7 @@ export const getVideoConstraints = (modelName: string, resolution: string | unde
     const isVidu = modelName.startsWith('Vidu');
     const isViduQ3 = modelName === 'Vidu Q3' || modelName === 'Vidu Q3 Pro' || modelName === 'Vidu Q3 Turbo';
     const isViduQ2 = modelName === 'Vidu Q2 Pro' || modelName === 'Vidu Q2 Turbo';
+    const isSD2 = modelName === 'SD 2.0 Fast' || modelName === 'SD 2.0 Pro';
 
     let resOptions = ['480p', '720p', '1080p'];
     let disabledRes: string[] = [];
@@ -93,6 +94,13 @@ export const getVideoConstraints = (modelName: string, resolution: string | unde
         disabledRatios = ['3:4', '4:3'];
         const allowed = ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s'];
         disabledDurations = videoDurations.filter(d => !allowed.includes(d));
+    } else if (isSD2) {
+        // SD 2.0: 480p/720p/1080p. Ratios include adaptive. Duration 4-15s.
+        resOptions = ['480p', '720p', '1080p'];
+        disabledRes = [];
+        disabledRatios = [];
+        const allowed = ['4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s'];
+        disabledDurations = videoDurations.filter(d => !allowed.includes(d));
     }
 
     return { resOptions, disabledRes, disabledRatios, disabledDurations };
@@ -110,6 +118,7 @@ export const getAutoCorrectedVideoSettings = (modelName: string, resolution: str
     const isVidu = modelName.startsWith('Vidu');
     const isViduQ3 = modelName === 'Vidu Q3' || modelName === 'Vidu Q3 Pro' || modelName === 'Vidu Q3 Turbo';
     const isViduQ2 = modelName === 'Vidu Q2 Pro' || modelName === 'Vidu Q2 Turbo';
+    const isSD2 = modelName === 'SD 2.0 Fast' || modelName === 'SD 2.0 Pro';
     
     let updates: { resolution?: string, duration?: string, aspectRatio?: string } = {};
 
@@ -149,6 +158,9 @@ export const getAutoCorrectedVideoSettings = (modelName: string, resolution: str
     } else if (isViduQ2 || isVidu) {
         if (resolution === '480p') updates.resolution = '720p';
         if (!['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s'].includes(duration || '')) updates.duration = '5s';
+    } else if (isSD2) {
+        if (!['480p', '720p', '1080p'].includes(resolution || '')) updates.resolution = '720p';
+        if (!['4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s'].includes(duration || '')) updates.duration = '5s';
     }
     return updates;
 };

@@ -6,6 +6,7 @@ import { generateSeedanceVideo } from "./seedance";
 import { generateKlingO1Video, generateKlingStandardVideo } from "./kling";
 import { generateAlibailianVideo } from "./alibailian";
 import { generateViduVideo } from "./vidu";
+import { generateSD2Video } from "./sd2";
 import { fetchThirdParty, constructUrl } from "../network";
 
 // --- Base Rules ---
@@ -176,6 +177,30 @@ export const ViduQ3Handler = {
     rules: { resolutions: ['720p', '1080p'], durations: ['1s', '2s', '3s', '4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s', '16s'], ratios: ['1:1', '16:9', '9:16'], maxInputImages: 2, hasPromptExtend: true }
 };
 
+export const SD2Handler = {
+    rules: {
+        resolutions: ['480p', '720p', '1080p'],
+        durations: ['4s', '5s', '6s', '7s', '8s', '9s', '10s', '11s', '12s', '13s', '14s', '15s'],
+        ratios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16', '9:21', 'adaptive'],
+        maxInputImages: 8
+    },
+    generate: async (cfg: ModelConfig, prompt: string, params: any) => {
+        const mediaInputs = Array.isArray(params.inputMedia)
+            ? params.inputMedia
+            : (Array.isArray(params.inputImages)
+                ? params.inputImages.map((src: string) => ({ src, isVideo: false }))
+                : []);
+        return await generateSD2Video(
+            cfg,
+            prompt,
+            params.aspectRatio,
+            params.resolution,
+            params.duration,
+            mediaInputs
+        );
+    }
+};
+
 export const VIDEO_HANDLERS: Record<string, any> = {
     'Sora 2': Sora2Handler,
     'Veo 3.1 Fast': VeoFastHandler,
@@ -206,5 +231,7 @@ export const VIDEO_HANDLERS: Record<string, any> = {
     'Vidu Q2 Turbo': ViduQ2Handler,
     'Vidu Q3': ViduQ3Handler,
     'Vidu Q3 Pro': ViduQ3Handler,
-    'Vidu Q3 Turbo': ViduQ3Handler
+    'Vidu Q3 Turbo': ViduQ3Handler,
+    'SD 2.0 Fast': SD2Handler,
+    'SD 2.0 Pro': SD2Handler
 };

@@ -80,7 +80,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
                            {type === 'image' ? (
                                <img src={entry.displaySrc} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
                            ) : (
-                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
+                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop playsInline preload="metadata" />
                            )}
                            
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">

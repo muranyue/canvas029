@@ -146,6 +146,24 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
       defaultEndpoint: '/ent/v2/text2video',
       defaultQueryEndpoint: '/ent/v2/tasks/{id}/creations'
   },
+  'SD 2.0 Fast': {
+      id: 'doubao-seedance-2-0-fast-260128',
+      name: 'SD 2.0 Fast',
+      type: 'VIDEO_GEN_STD',
+      category: 'VIDEO',
+      defaultBaseUrl: 'https://ai.t8star.cn',
+      defaultEndpoint: '/v2/videos/generations',
+      defaultQueryEndpoint: '/v2/videos/generations/{task_id}'
+  },
+  'SD 2.0 Pro': {
+      id: 'doubao-seedance-2-0-260128',
+      name: 'SD 2.0 Pro',
+      type: 'VIDEO_GEN_STD',
+      category: 'VIDEO',
+      defaultBaseUrl: 'https://ai.t8star.cn',
+      defaultEndpoint: '/v2/videos/generations',
+      defaultQueryEndpoint: '/v2/videos/generations/{task_id}'
+  },
   
   ...customModels
 };
@@ -168,7 +186,7 @@ export const getModelConfig = (modelName: string): ModelConfig => {
         if (stored) {
             const parsed = JSON.parse(stored);
             return {
-                baseUrl: parsed.baseUrl || EnvConfig.DEFAULT_BASE_URL,
+                baseUrl: parsed.baseUrl || def.defaultBaseUrl || EnvConfig.DEFAULT_BASE_URL,
                 key: parsed.key || '', 
                 modelId: parsed.modelId || def.id,
                 endpoint: parsed.endpoint || def.defaultEndpoint,
@@ -179,7 +197,7 @@ export const getModelConfig = (modelName: string): ModelConfig => {
     }
 
     return {
-        baseUrl: EnvConfig.DEFAULT_BASE_URL,
+        baseUrl: def.defaultBaseUrl || EnvConfig.DEFAULT_BASE_URL,
         key: '', 
         modelId: def.id,
         endpoint: def.defaultEndpoint,

@@ -262,12 +262,38 @@ export const LocalInputThumbnails = memo(({ inputs, ready, isDark }: { inputs: {
 
 export const VideoPreview = ({ src, isDark }: { src: string, isDark: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const [isPlaying, setIsPlaying] = useState(true);
-    const togglePlay = (e: React.MouseEvent) => { e.stopPropagation(); const v = videoRef.current; if (v) { if (v.paused) { v.play(); setIsPlaying(true); } else { v.pause(); setIsPlaying(false); } } };
+    const [isPlaying, setIsPlaying] = useState(false);
+    const togglePlay = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const v = videoRef.current;
+        if (!v) return;
+        if (v.paused) {
+            void v.play();
+        } else {
+            v.pause();
+        }
+    };
+
+    useEffect(() => {
+        const v = videoRef.current;
+        if (!v) return;
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        v.addEventListener('play', onPlay);
+        v.addEventListener('pause', onPause);
+        // Ensure default is paused in canvas.
+        v.pause();
+        setIsPlaying(false);
+        return () => {
+            v.removeEventListener('play', onPlay);
+            v.removeEventListener('pause', onPause);
+        };
+    }, [src]);
+
     return (
         <div className="relative w-full h-full group/video">
-            <video ref={videoRef} src={src} className="w-full h-full object-cover pointer-events-none" loop muted autoPlay playsInline draggable={false} />
-            <div className="absolute bottom-3 left-3 z-30 pointer-events-auto opacity-0 group-hover/video:opacity-100 transition-opacity">
+            <video ref={videoRef} src={src} className="w-full h-full object-cover pointer-events-none" loop muted playsInline preload="metadata" draggable={false} />
+            <div className="absolute bottom-3 left-3 z-30 pointer-events-auto opacity-100 group-hover/video:opacity-100 transition-opacity">
                 <button onClick={togglePlay} className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md border transition-all shadow-sm ${isDark ? 'bg-black/60 border-white/10 text-white hover:bg-black/80 hover:scale-110' : 'bg-white/60 border-black/10 text-black hover:bg-white/80 hover:scale-110'}`} data-interactive="true">
                     {isPlaying ? <Icons.Pause size={14} fill="currentColor" /> : <Icons.Play size={14} fill="currentColor" className="ml-0.5" />}
                 </button>
@@ -350,7 +376,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
                     return (
                       <div key={entry.displaySrc + index} className={`relative h-full rounded-xl border ${isDark ? 'border-zinc-800 bg-black' : 'border-gray-200 bg-white'} overflow-hidden shadow-2xl flex-shrink-0 group/card ${isMain ? 'ring-2 ring-cyan-500/50' : ''}`} style={{ width: data.width }}>
                            {isVideo ? (
-                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop autoPlay playsInline />
+                               <video src={entry.displaySrc} className="w-full h-full object-cover" controls={isMain} muted loop playsInline preload="metadata" />
                            ) : (
                                <img src={entry.displaySrc} className={`w-full h-full object-contain ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} draggable={false} onMouseDown={(e) => e.preventDefault()} />
                            )}

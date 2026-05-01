@@ -20,7 +20,7 @@ const getProvider = (key: string, name: string): string => {
     if (lowerKey.includes('banana') || lowerKey.includes('gemini') || lowerKey.includes('veo') || lowerName.includes('veo') || lowerName.includes('gemini')) return 'Google Gemini';
     
     // ByteDance (formerly Jmeng) - Jmeng 4.5, 3.5, 4
-    if (lowerName.includes('jmeng') || lowerKey.includes('doubao') || lowerKey.includes('seedance') || lowerKey.includes('jimeng') || lowerKey.includes('即梦')) return 'ByteDance';
+    if (lowerName.includes('jmeng') || lowerKey.includes('doubao') || lowerKey.includes('seedance') || lowerKey.includes('jimeng') || lowerKey.includes('即梦') || lowerName.includes('sd 2.0') || lowerKey.includes('sd 2.0')) return 'ByteDance';
     
     // Vidu - Vidu Q2 Pro, Turbo
     if (lowerName.includes('vidu') || lowerKey.includes('vidu') || lowerKey.includes('q2-')) return 'Vidu';

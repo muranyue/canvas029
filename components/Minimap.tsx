@@ -26,13 +26,13 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
     }), [transform, viewportSize]);
 
     // 2. Calculate Layout Config (Scale & Offset)
+    // Keep layout stable while panning/zooming to avoid reprocessing all nodes every frame.
     const layout = useMemo(() => {
-        // A. Calculate Union Bounds (Nodes + Current Viewport)
-        // This ensures the map covers where we are, even if far from nodes
-        let minX = viewWorld.x;
-        let minY = viewWorld.y;
-        let maxX = viewWorld.x + viewWorld.w;
-        let maxY = viewWorld.y + viewWorld.h;
+        // A. Calculate bounds from nodes only.
+        let minX = nodes.length > 0 ? Infinity : viewWorld.x;
+        let minY = nodes.length > 0 ? Infinity : viewWorld.y;
+        let maxX = nodes.length > 0 ? -Infinity : (viewWorld.x + viewWorld.w);
+        let maxY = nodes.length > 0 ? -Infinity : (viewWorld.y + viewWorld.h);
 
         if (nodes.length > 0) {
             nodes.forEach(node => {
@@ -56,51 +56,13 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
         // Try to fit the entire union bounds into the map
         let scale = Math.min(MAP_WIDTH / boundsW, MAP_HEIGHT / boundsH);
 
-        // C. Apply Constraints to Scale based on Viewport Frame Size
-        // Requirement: Viewport frame longest side must be between 1/5 and 1/1 of Map longest side.
-        const mapLongest = Math.max(MAP_WIDTH, MAP_HEIGHT);
-        const viewLongest = Math.max(viewWorld.w, viewWorld.h);
-        
-        const minFramePx = mapLongest / 5; // 20%
-        const maxFramePx = mapLongest;     // 100%
-
-        // If "Fit All" makes the frame too small (tiny dot), zoom in
-        if (viewLongest * scale < minFramePx) {
-            scale = minFramePx / viewLongest;
-        }
-        // If "Fit All" makes the frame too big (larger than map), zoom out (limit max size)
-        if (viewLongest * scale > maxFramePx) {
-            scale = maxFramePx / viewLongest;
-        }
-
-        // D. Calculate Offset (Panning)
-        // Start by attempting to center the union bounds
+        // C. Calculate Offset (Panning)
+        // Start by centering the node bounds.
         let offsetX = (MAP_WIDTH - boundsW * scale) / 2 - minX * scale;
         let offsetY = (MAP_HEIGHT - boundsH * scale) / 2 - minY * scale;
 
-        // E. Clamp Offset (Follow Logic)
-        // Ensure the viewport frame is always visible inside the map
-        const vpLeft = viewWorld.x * scale + offsetX;
-        const vpTop = viewWorld.y * scale + offsetY;
-        const vpRight = vpLeft + viewWorld.w * scale;
-        const vpBottom = vpTop + viewWorld.h * scale;
-
-        // Correction X
-        if (vpLeft < 0) {
-            offsetX += -vpLeft; // Shift right
-        } else if (vpRight > MAP_WIDTH) {
-            offsetX -= (vpRight - MAP_WIDTH); // Shift left
-        }
-
-        // Correction Y
-        if (vpTop < 0) {
-            offsetY += -vpTop; // Shift down
-        } else if (vpBottom > MAP_HEIGHT) {
-            offsetY -= (vpBottom - MAP_HEIGHT); // Shift up
-        }
-
         return { scale, offsetX, offsetY };
-    }, [nodes, viewWorld]);
+    }, [nodes, viewWorld.x, viewWorld.y, viewWorld.w, viewWorld.h]);
 
     // Helpers for rendering
     const toMini = (val: number, type: 'x' | 'y') => {
@@ -115,6 +77,16 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
         width: scaleSize(viewWorld.w),
         height: scaleSize(viewWorld.h)
     };
+
+    const miniNodes = useMemo(() => {
+        return nodes.map(node => {
+            const mx = toMini(node.x, 'x');
+            const my = toMini(node.y, 'y');
+            const mw = scaleSize(node.width);
+            const mh = scaleSize(node.height);
+            return { id: node.id, mx, my, mw, mh };
+        });
+    }, [nodes, layout.scale, layout.offsetX, layout.offsetY]);
 
     // Drag Logic (Mouse + Touch)
     const dragRef = useRef<{ startX: number, startY: number, startTx: number, startTy: number } | null>(null);
@@ -210,24 +182,17 @@ export const Minimap: React.FC<MinimapProps> = ({ nodes, transform, viewportSize
             onMouseDown={(e) => e.stopPropagation()}
         >
             {/* Render Nodes */}
-            {nodes.map(node => {
-                const mx = toMini(node.x, 'x');
-                const my = toMini(node.y, 'y');
-                const mw = scaleSize(node.width);
-                const mh = scaleSize(node.height);
-                
-                // Simple culling optimization
-                if (mx + mw < 0 || mx > MAP_WIDTH || my + mh < 0 || my > MAP_HEIGHT) return null;
-
+            {miniNodes.map(node => {
+                if (node.mx + node.mw < 0 || node.mx > MAP_WIDTH || node.my + node.mh < 0 || node.my > MAP_HEIGHT) return null;
                 return (
                     <div
                         key={node.id}
                         className={`absolute rounded-sm ${nodeClass}`}
                         style={{
-                            left: mx,
-                            top: my,
-                            width: mw,
-                            height: mh,
+                            left: node.mx,
+                            top: node.my,
+                            width: node.mw,
+                            height: node.mh,
                             opacity: 0.6
                         }}
                     />

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import { CanvasTransform, Point } from './types';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
@@ -8,6 +8,7 @@ import { QuickAddMenu } from './components/QuickAddMenu';
 import { NewWorkflowDialog } from './components/NewWorkflowDialog';
 import { PreviewModal } from './components/PreviewModal';
 import { CanvasArea } from './components/CanvasArea';
+import { Sd2AssetLibraryModal } from './components/Sd2AssetLibraryModal';
 import {
     useCanvasState,
     useNodeOperations,
@@ -22,12 +23,22 @@ const App: React.FC = () => {
     return <CanvasWithSidebar />;
 };
 
+const CULL_RENDER_THRESHOLD = 300;
+
+function useStableCallback<T extends (...args: any[]) => any>(callback: T): T {
+    const callbackRef = useRef(callback);
+    useEffect(() => {
+        callbackRef.current = callback;
+    }, [callback]);
+    return useCallback(((...args: any[]) => callbackRef.current(...args)) as T, []);
+}
+
 const CanvasWithSidebar: React.FC = () => {
     // ========== Refs ==========
     const containerRef = useRef<HTMLDivElement>(null);
     const dragStartRef = useRef<{ x: number; y: number; w?: number; h?: number; nodeId?: string; initialNodeX?: number; direction?: string }>({ x: 0, y: 0 });
     const initialTransformRef = useRef<CanvasTransform>({ x: 0, y: 0, k: 1 });
-    const initialNodePositionsRef = useRef<{ id: string; x: number; y: number }[]>([]);
+    const initialNodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
     const connectionStartRef = useRef<{ nodeId: string; type: 'source' | 'target' } | null>(null);
     const lastMousePosRef = useRef<Point>({ x: 0, y: 0 });
     const workflowInputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +47,8 @@ const CanvasWithSidebar: React.FC = () => {
     const nodeToReplaceRef = useRef<string | null>(null);
     const draggingNodesRef = useRef<Set<string>>(new Set());
     const touchStartRef = useRef<{ x: number; y: number; dist: number; centerX: number; centerY: number } | null>(null);
+    const [isSd2AssetLibraryOpen, setIsSd2AssetLibraryOpen] = useState(false);
+    const [renderModeOverride, setRenderModeOverride] = useState<'AUTO' | 'FULL' | 'CULL'>('AUTO');
 
     // ========== Canvas State ==========
     const canvasState = useCanvasState();
@@ -44,7 +57,7 @@ const CanvasWithSidebar: React.FC = () => {
         canvasBg, setCanvasBg, deletedNodes, setDeletedNodes,
         selectedNodeIds, setSelectedNodeIds, selectedConnectionId, setSelectedConnectionId,
         selectionBox, setSelectionBox, dragMode, setDragMode, dragModeRef,
-        viewportSize, setViewportSize, visibleNodes, visibleConnections,
+        viewportSize, setViewportSize, visibleNodes, visibleConnections, nodeById,
         previewMedia, setPreviewMedia, contextMenu, setContextMenu,
         quickAddMenu, setQuickAddMenu, showNewWorkflowDialog, setShowNewWorkflowDialog,
         isSettingsOpen, setIsSettingsOpen, showMinimap,
@@ -64,7 +77,7 @@ const CanvasWithSidebar: React.FC = () => {
         nodes, setNodes, connections, setConnections, deletedNodes, setDeletedNodes,
         selectedNodeIds, setSelectedNodeIds, updateNodeData, screenToWorld, getInputImages, containerRef,
     });
-    const { addNode, deleteNode, handleGenerate, handleMaximize, handleDownload, handleAlign, handleToolbarAction, generateId } = nodeOps;
+    const { addNode, deleteNode, handleGenerate, handleMaximize, handleDownload, handleUploadToAssetLibrary, handleAlign, handleToolbarAction, generateId } = nodeOps;
 
     const grouping = useGrouping({
         nodes, setNodes, selectedNodeIds, setSelectedNodeIds, nextGroupColor, setNextGroupColor, setShowColorPicker,
@@ -91,6 +104,17 @@ const CanvasWithSidebar: React.FC = () => {
         replaceImageRef.current?.click();
     };
 
+    const sidebarNodes = useMemo(() => [...nodes, ...deletedNodes], [nodes, deletedNodes]);
+
+    const handleSidebarLoadWorkflow = useCallback(() => workflowInputRef.current?.click(), []);
+    const handleSidebarNewWorkflow = useCallback(() => setShowNewWorkflowDialog(true), []);
+    const handleSidebarImportAsset = useCallback(() => assetInputRef.current?.click(), []);
+    const handleSidebarOpenSd2Library = useCallback(() => setIsSd2AssetLibraryOpen(true), []);
+    const handleSidebarOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
+    const handleSidebarToggleDesktop = useCallback(() => {
+        setDesktopPlatform(prev => prev === 'WIN' ? 'MAC' : 'WIN');
+    }, [setDesktopPlatform]);
+
     // ========== Canvas Handlers ==========
     const handlers = useCanvasHandlers({
         refs: {
@@ -111,6 +135,21 @@ const CanvasWithSidebar: React.FC = () => {
             addNode, generateId, createConnection,
         },
     });
+
+    const handleSidebarAddNode = useStableCallback(addNode);
+    const handleSidebarSaveWorkflow = useStableCallback(handlers.handleSaveWorkflow);
+    const handleSidebarPreviewMedia = useStableCallback(handlers.handleHistoryPreview);
+    const autoRenderMode = nodes.length > CULL_RENDER_THRESHOLD ? 'CULL' : 'FULL';
+    const effectiveRenderMode = renderModeOverride === 'AUTO' ? autoRenderMode : renderModeOverride;
+
+    const renderedNodes = useMemo(
+        () => effectiveRenderMode === 'FULL' ? nodes : visibleNodes,
+        [effectiveRenderMode, nodes, visibleNodes]
+    );
+    const renderedConnections = useMemo(
+        () => effectiveRenderMode === 'FULL' ? connections : visibleConnections,
+        [effectiveRenderMode, connections, visibleConnections]
+    );
 
     // ========== Effects ==========
     useEffect(() => {
@@ -137,6 +176,28 @@ const CanvasWithSidebar: React.FC = () => {
         return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
     }, [dragModeRef, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox]);
 
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'F9') return;
+            const target = e.target as HTMLElement | null;
+            const isInput = !!target && (
+                target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.isContentEditable
+            );
+            if (isInput) return;
+            e.preventDefault();
+            setRenderModeOverride(prev => {
+                if (prev === 'AUTO') return 'FULL';
+                if (prev === 'FULL') return 'CULL';
+                return 'AUTO';
+            });
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
+
     // ========== Render ==========
     return (
         <div className="w-full h-screen overflow-hidden flex relative font-sans text-gray-800">
@@ -144,17 +205,18 @@ const CanvasWithSidebar: React.FC = () => {
             <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} isDark={isDark} />
 
             <Sidebar
-                onAddNode={addNode}
-                onSaveWorkflow={handlers.handleSaveWorkflow}
-                onLoadWorkflow={() => workflowInputRef.current?.click()}
-                onNewWorkflow={() => setShowNewWorkflowDialog(true)}
-                onImportAsset={() => assetInputRef.current?.click()}
-                onOpenSettings={() => setIsSettingsOpen(true)}
+                onAddNode={handleSidebarAddNode}
+                onSaveWorkflow={handleSidebarSaveWorkflow}
+                onLoadWorkflow={handleSidebarLoadWorkflow}
+                onNewWorkflow={handleSidebarNewWorkflow}
+                onImportAsset={handleSidebarImportAsset}
+                onOpenSd2AssetLibrary={handleSidebarOpenSd2Library}
+                onOpenSettings={handleSidebarOpenSettings}
                 onUpdateCanvasBg={setCanvasBg}
                 desktopPlatform={desktopPlatform}
-                onToggleDesktopPlatform={() => setDesktopPlatform(prev => prev === 'WIN' ? 'MAC' : 'WIN')}
-                nodes={[...nodes, ...deletedNodes]}
-                onPreviewMedia={handlers.handleHistoryPreview}
+                onToggleDesktopPlatform={handleSidebarToggleDesktop}
+                nodes={sidebarNodes}
+                onPreviewMedia={handleSidebarPreviewMedia}
                 isDark={isDark}
             />
 
@@ -166,8 +228,9 @@ const CanvasWithSidebar: React.FC = () => {
                 containerRef={containerRef}
                 connectionStartRef={connectionStartRef}
                 nodes={nodes}
-                visibleNodes={visibleNodes}
-                visibleConnections={visibleConnections}
+                visibleNodes={renderedNodes}
+                visibleConnections={renderedConnections}
+                nodeById={nodeById}
                 transform={transform}
                 canvasBg={canvasBg}
                 selectedNodeIds={selectedNodeIds}
@@ -186,6 +249,7 @@ const CanvasWithSidebar: React.FC = () => {
                 handleGenerate={handleGenerate}
                 handleMaximize={handleMaximize}
                 handleDownload={handleDownload}
+                handleUploadToAssetLibrary={handleUploadToAssetLibrary}
                 handleToolbarAction={handleToolbarAction}
                 handleUpload={triggerReplaceImage}
                 deleteNode={deleteNode}
@@ -262,6 +326,12 @@ const CanvasWithSidebar: React.FC = () => {
                     onClose={() => setPreviewMedia(null)}
                 />
             )}
+
+            <Sd2AssetLibraryModal
+                isOpen={isSd2AssetLibraryOpen}
+                isDark={isDark}
+                onClose={() => setIsSd2AssetLibraryOpen(false)}
+            />
         </div>
     );
 };

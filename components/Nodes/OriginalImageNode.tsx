@@ -9,6 +9,7 @@ interface OriginalImageNodeProps {
   updateData: (id: string, updates: Partial<NodeData>) => void;
   onMaximize?: (id: string) => void;
   onDownload?: (id: string) => void;
+  onUploadToAssetLibrary?: (id: string) => void;
   onDelete?: (id: string) => void;
   onUpload?: (id: string) => void;
   isDark?: boolean;
@@ -16,9 +17,11 @@ interface OriginalImageNodeProps {
 }
 
 export const OriginalImageNode: React.FC<OriginalImageNodeProps> = ({
-    data, updateData, onMaximize, onDownload, onDelete, onUpload, isDark = true, selected
+    data, updateData, onMaximize, onDownload, onUploadToAssetLibrary, onDelete, onUpload, isDark = true, selected
 }) => {
     const overlayToolbarBg = isDark ? 'bg-black/50 border-white/5 text-gray-400' : 'bg-white/50 border-black/5 text-gray-600';
+    const canUploadToAssetLibrary = !!(data.videoSrc || data.imageSrc || data.originalImageSrc);
+    const isUploadingAsset = !!data.isUploadingAsset;
 
     return (
         <>
@@ -27,6 +30,7 @@ export const OriginalImageNode: React.FC<OriginalImageNodeProps> = ({
               <div className={`flex gap-1 backdrop-blur-md rounded-lg p-1 border ${overlayToolbarBg}`} data-interactive="true">
                       <button title="Maximize" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12} className="cursor-pointer"/></button>
                       <button title="Download" className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-zinc-800 hover:text-white' : 'hover:bg-gray-200 hover:text-black'}`} onClick={(e) => { e.stopPropagation(); onDownload?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDownload?.(data.id); }} data-interactive="true"><Icons.Download size={12} className="cursor-pointer"/></button>
+                      <button title={isUploadingAsset ? "Uploading..." : "Upload Asset"} className={`p-1 rounded transition-colors ${(isUploadingAsset || !canUploadToAssetLibrary) ? (isDark ? 'text-zinc-600 cursor-not-allowed' : 'text-gray-300 cursor-not-allowed') : (isDark ? 'hover:bg-zinc-800 hover:text-cyan-300 text-zinc-300' : 'hover:bg-gray-200 hover:text-cyan-600 text-gray-500')}`} onClick={(e) => { e.stopPropagation(); if (!isUploadingAsset && canUploadToAssetLibrary) onUploadToAssetLibrary?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); if (!isUploadingAsset && canUploadToAssetLibrary) onUploadToAssetLibrary?.(data.id); }} disabled={isUploadingAsset || !canUploadToAssetLibrary} data-interactive="true">{isUploadingAsset ? <Icons.Loader2 size={12} className="cursor-pointer animate-spin"/> : <Icons.Album size={12} className="cursor-pointer"/>}</button>
                       <button title="Delete" className={`p-1 rounded transition-colors text-red-400 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`} onClick={(e) => { e.stopPropagation(); onDelete?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onDelete?.(data.id); }} data-interactive="true"><Icons.Trash2 size={12} className="cursor-pointer"/></button>
               </div>
           </div>

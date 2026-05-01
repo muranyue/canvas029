@@ -60,6 +60,7 @@ export const generateImage = async (
 export const generateVideo = async (
     prompt: string, 
     inputImages: string[] = [], 
+    inputMedia: { src: string, isVideo?: boolean }[] = [],
     aspectRatio: string = "16:9", 
     modelName: string = "Sora2", 
     resolution: string = "720p", 
@@ -86,7 +87,7 @@ export const generateVideo = async (
     
     try {
         const result = await handler.generate(config, prompt, { 
-            aspectRatio, resolution, duration, inputImages, isStartEndMode, isReferenceMode, count, promptOptimize 
+            aspectRatio, resolution, duration, inputImages, inputMedia, isStartEndMode, isReferenceMode, count, promptOptimize 
         });
         return Array.isArray(result) ? result : [result];
     } catch (e) {

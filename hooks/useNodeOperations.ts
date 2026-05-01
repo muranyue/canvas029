@@ -2,6 +2,13 @@ import { useCallback, useRef } from 'react';
 import { NodeData, Connection, NodeType } from '../types';
 import { generateCreativeDescription, generateImage, generateVideo } from '../services/geminiService';
 import { reportLocalDevFailure, normalizeErrorForLocalLog } from '../services/localDevLogger';
+import {
+    createSd2AssetFromMediaSource,
+    loadSd2AssetLibrary,
+    saveSd2AssetLibrary,
+    Sd2AssetItem,
+    Sd2AssetType
+} from '../services/mode/video/sd2Assets';
 
 const DEFAULT_NODE_WIDTH = 320;
 const DEFAULT_NODE_HEIGHT = 240;
@@ -265,6 +272,7 @@ export const useNodeOperations = ({
                     results = await generateVideo(
                         node.prompt || '',
                         inputSrcs,
+                        inputs,
                         node.aspectRatio,
                         node.model,
                         node.resolution,
@@ -384,6 +392,42 @@ export const useNodeOperations = ({
             document.body.removeChild(link);
         }
     }, [nodes]);
+
+    const handleUploadToAssetLibrary = useCallback(async (nodeId: string) => {
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return;
+        if (node.isUploadingAsset) return;
+
+        const source = node.videoSrc || node.originalImageSrc || node.imageSrc;
+        if (!source) {
+            alert("No media to upload.");
+            return;
+        }
+
+        const assetType: Sd2AssetType = node.videoSrc ? 'Video' : 'Image';
+        updateNodeData(nodeId, { isUploadingAsset: true });
+
+        try {
+            const created = await createSd2AssetFromMediaSource(source, assetType);
+            const current = loadSd2AssetLibrary();
+            const item: Sd2AssetItem = {
+                assetId: created.assetId,
+                status: created.status,
+                assetType,
+                sourceUrl: created.sourceUrl || source,
+                previewUrl: assetType === 'Video' ? undefined : (node.imageSrc || node.originalImageSrc),
+                createdLocallyAt: Date.now(),
+            };
+            const next = [item, ...current.filter((it) => it.assetId !== item.assetId)];
+            saveSd2AssetLibrary(next);
+            alert(`Uploaded to asset library: ${created.assetId}`);
+        } catch (error) {
+            const message = formatErrorMessage(error);
+            alert(`Upload to asset library failed: ${message}`);
+        } finally {
+            updateNodeData(nodeId, { isUploadingAsset: false });
+        }
+    }, [nodes, updateNodeData]);
 
     const handleAlign = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
         if (selectedNodeIds.size < 2) return;
@@ -509,6 +553,7 @@ export const useNodeOperations = ({
         handleGenerate,
         handleMaximize,
         handleDownload,
+        handleUploadToAssetLibrary,
         handleAlign,
         handleToolbarAction,
         generateId,

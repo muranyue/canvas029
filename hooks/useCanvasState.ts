@@ -15,6 +15,12 @@ const CANVAS_DB_VERSION = 1;
 const CANVAS_STORE_NAME = 'snapshots';
 const CANVAS_SNAPSHOT_KEY = 'latest';
 const CANVAS_UPDATED_AT_KEY = 'canvas_state_updated_at';
+// Keep at least one off-screen node range preloaded, regardless of zoom level.
+const VIEWPORT_CULL_BUFFER_PX = 240;
+const MIN_PRELOAD_NODE_BUFFER_WORLD = 900;
+const SPATIAL_HASH_CELL_SIZE = 1200;
+const MAX_INDEXED_CELLS_PER_NODE = 128;
+const MAX_INDEXED_CELLS_PER_CONNECTION = 128;
 
 let canvasDbPromise: Promise<IDBDatabase | null> | null = null;
 
@@ -31,6 +37,7 @@ const loadState = <T,>(key: string, fallback: T): T => {
 
 const isBlobUrl = (url?: string): boolean => !!url && url.startsWith('blob:');
 const isInlineMediaUrl = (url?: string): boolean => !!url && (url.startsWith('data:') || url.startsWith('blob:'));
+const toCellKey = (x: number, y: number) => `${x},${y}`;
 
 const getCanvasDb = (): Promise<IDBDatabase | null> => {
     if (typeof window === 'undefined' || !window.indexedDB) {
@@ -310,6 +317,18 @@ export const useCanvasState = () => {
     const [suggestedNodes, setSuggestedNodes] = useState<NodeData[]>([]);
 
     const isDark = canvasBg === '#0B0C0E';
+    const lastHeavyPersistRef = useRef<{
+        nodes: NodeData[];
+        connections: Connection[];
+        canvasBg: string;
+        deletedNodes: NodeData[];
+    }>({
+        nodes,
+        connections,
+        canvasBg,
+        deletedNodes,
+    });
+    const lastInteractionAtRef = useRef(0);
 
     useEffect(() => {
         let isCancelled = false;
@@ -403,14 +422,36 @@ export const useCanvasState = () => {
             });
     }, [nodes, connections, transform, canvasBg, deletedNodes]);
 
+    const persistTransformOnly = useCallback((nextTransform?: CanvasTransform) => {
+        if (!isStorageHydratedRef.current) return;
+        const value = nextTransform ?? transform;
+        try {
+            localStorage.setItem('canvas_transform', JSON.stringify(value));
+        } catch (e) {
+            console.warn('Failed to persist canvas transform', e);
+        }
+    }, [transform]);
+
     // Sync dragModeRef
     useEffect(() => {
         dragModeRef.current = dragMode;
+        if (dragMode !== 'NONE') {
+            lastInteractionAtRef.current = Date.now();
+        }
     }, [dragMode]);
 
-    // Persistence Effect with Dynamic Debounce
+    // Heavy persistence effect (nodes/connections/media/config)
     useEffect(() => {
         if (!isStorageHydrated) return;
+        if (dragMode !== 'NONE') return;
+
+        const hasHeavyChanges =
+            lastHeavyPersistRef.current.nodes !== nodes ||
+            lastHeavyPersistRef.current.connections !== connections ||
+            lastHeavyPersistRef.current.canvasBg !== canvasBg ||
+            lastHeavyPersistRef.current.deletedNodes !== deletedNodes;
+
+        if (!hasHeavyChanges) return;
 
         const isGenerating = nodes.some(n => n.isLoading);
         const hasInlineMedia = nodes.some((node) => {
@@ -425,18 +466,56 @@ export const useCanvasState = () => {
             }
             return false;
         });
-        const delay = hasInlineMedia ? 80 : (isGenerating ? 1200 : 400);
+        const baseDelay = hasInlineMedia ? 240 : (isGenerating ? 1200 : 500);
+        const timeSinceInteraction = Date.now() - lastInteractionAtRef.current;
+        const interactionAwareDelay = timeSinceInteraction < 900
+            ? Math.max(baseDelay, 900)
+            : baseDelay;
+
+        lastHeavyPersistRef.current = { nodes, connections, canvasBg, deletedNodes };
+
+        let idleHandle: number | null = null;
+        const requestIdle = (window as any).requestIdleCallback as
+            ((cb: () => void, opts?: { timeout?: number }) => number) | undefined;
+        const cancelIdle = (window as any).cancelIdleCallback as
+            ((id: number) => void) | undefined;
+
+        const handler = window.setTimeout(() => {
+            if (requestIdle) {
+                idleHandle = requestIdle(() => {
+                    persistCanvasState();
+                }, { timeout: 1600 });
+            } else {
+                persistCanvasState();
+            }
+        }, interactionAwareDelay);
+
+        return () => {
+            window.clearTimeout(handler);
+            if (idleHandle !== null && cancelIdle) {
+                cancelIdle(idleHandle);
+            }
+        };
+    }, [nodes, connections, canvasBg, deletedNodes, isStorageHydrated, persistCanvasState, dragMode]);
+
+    // Lightweight transform persistence effect (pan/zoom only)
+    useEffect(() => {
+        if (!isStorageHydrated) return;
+        if (dragMode !== 'NONE') return;
 
         const handler = setTimeout(() => {
-            persistCanvasState();
-        }, delay);
+            persistTransformOnly(transform);
+        }, 160);
 
         return () => clearTimeout(handler);
-    }, [nodes, connections, transform, canvasBg, deletedNodes, isStorageHydrated, persistCanvasState]);
+    }, [transform, isStorageHydrated, dragMode, persistTransformOnly]);
 
     // Flush pending changes when tab is hidden or page is refreshed
     useEffect(() => {
-        const flushNow = () => persistCanvasState();
+        const flushNow = () => {
+            persistTransformOnly(transform);
+            persistCanvasState();
+        };
 
         const handleBeforeUnload = () => {
             flushNow();
@@ -455,7 +534,7 @@ export const useCanvasState = () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [persistCanvasState]);
+    }, [persistCanvasState, persistTransformOnly, transform]);
 
     // Viewport resize handler
     useEffect(() => {
@@ -488,58 +567,214 @@ export const useCanvasState = () => {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
     }, []);
 
-    // Calculate visible nodes with buffer zone
-    const visibleNodes = useMemo(() => {
-        if (viewportSize.width === 0 || viewportSize.height === 0) return nodes;
-        
-        const buffer = 200;
-        const viewportLeft = -transform.x / transform.k - buffer / transform.k;
-        const viewportTop = -transform.y / transform.k - buffer / transform.k;
-        const viewportRight = (viewportSize.width - transform.x) / transform.k + buffer / transform.k;
-        const viewportBottom = (viewportSize.height - transform.y) / transform.k + buffer / transform.k;
-        
-        return nodes.filter(node => {
-            const nodeRight = node.x + node.width;
-            const nodeBottom = node.y + node.height;
-            return !(nodeRight < viewportLeft || 
-                     node.x > viewportRight || 
-                     nodeBottom < viewportTop || 
-                     node.y > viewportBottom);
-        });
-    }, [nodes, transform, viewportSize]);
+    const nodeById = useMemo(() => {
+        const map = new Map<string, NodeData>();
+        for (const node of nodes) map.set(node.id, node);
+        return map;
+    }, [nodes]);
 
-    const visibleNodeIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
-    // Calculate visible connections
-    const visibleConnections = useMemo(() => {
-        if (viewportSize.width === 0 || viewportSize.height === 0) return connections;
-        
-        const buffer = 200;
-        const viewportLeft = -transform.x / transform.k - buffer / transform.k;
-        const viewportTop = -transform.y / transform.k - buffer / transform.k;
-        const viewportRight = (viewportSize.width - transform.x) / transform.k + buffer / transform.k;
-        const viewportBottom = (viewportSize.height - transform.y) / transform.k + buffer / transform.k;
-        
-        return connections.filter(conn => {
-            const source = nodes.find(n => n.id === conn.sourceId);
-            const target = nodes.find(n => n.id === conn.targetId);
-            if (!source || !target) return false;
-            
+    const nodeOrderById = useMemo(() => {
+        const map = new Map<string, number>();
+        for (let i = 0; i < nodes.length; i++) {
+            map.set(nodes[i].id, i);
+        }
+        return map;
+    }, [nodes]);
+
+    const connectionOrderById = useMemo(() => {
+        const map = new Map<string, number>();
+        for (let i = 0; i < connections.length; i++) {
+            map.set(connections[i].id, i);
+        }
+        return map;
+    }, [connections]);
+
+    const nodeSpatialIndex = useMemo(() => {
+        const cellMap = new Map<string, string[]>();
+        const boundsById = new Map<string, { left: number; top: number; right: number; bottom: number; node: NodeData }>();
+        const overflowIds: string[] = [];
+
+        for (const node of nodes) {
+            const left = node.x;
+            const top = node.y;
+            const right = node.x + node.width;
+            const bottom = node.y + node.height;
+            boundsById.set(node.id, { left, top, right, bottom, node });
+
+            const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
+            const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
+            const minCellY = Math.floor(top / SPATIAL_HASH_CELL_SIZE);
+            const maxCellY = Math.floor(bottom / SPATIAL_HASH_CELL_SIZE);
+            const cells = (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1);
+
+            if (cells > MAX_INDEXED_CELLS_PER_NODE) {
+                overflowIds.push(node.id);
+                continue;
+            }
+
+            for (let cx = minCellX; cx <= maxCellX; cx++) {
+                for (let cy = minCellY; cy <= maxCellY; cy++) {
+                    const key = toCellKey(cx, cy);
+                    const list = cellMap.get(key);
+                    if (list) {
+                        list.push(node.id);
+                    } else {
+                        cellMap.set(key, [node.id]);
+                    }
+                }
+            }
+        }
+
+        return { cellMap, boundsById, overflowIds };
+    }, [nodes]);
+
+    const connectionSpatialIndex = useMemo(() => {
+        const cellMap = new Map<string, string[]>();
+        const boundsById = new Map<string, { left: number; top: number; right: number; bottom: number; conn: Connection }>();
+        const overflowIds: string[] = [];
+
+        for (const conn of connections) {
+            const source = nodeById.get(conn.sourceId);
+            const target = nodeById.get(conn.targetId);
+            if (!source || !target) continue;
+
             const sx = source.x + source.width;
             const sy = source.y + source.height / 2;
             const tx = target.x;
             const ty = target.y + target.height / 2;
-            
-            const lineLeft = Math.min(sx, tx);
-            const lineRight = Math.max(sx, tx);
-            const lineTop = Math.min(sy, ty);
-            const lineBottom = Math.max(sy, ty);
-            
-            return !(lineRight < viewportLeft || 
-                     lineLeft > viewportRight || 
-                     lineBottom < viewportTop || 
-                     lineTop > viewportBottom);
-        });
-    }, [connections, nodes, transform, viewportSize]);
+
+            const left = Math.min(sx, tx);
+            const right = Math.max(sx, tx);
+            const top = Math.min(sy, ty);
+            const bottom = Math.max(sy, ty);
+            boundsById.set(conn.id, { left, top, right, bottom, conn });
+
+            const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
+            const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
+            const minCellY = Math.floor(top / SPATIAL_HASH_CELL_SIZE);
+            const maxCellY = Math.floor(bottom / SPATIAL_HASH_CELL_SIZE);
+            const cells = (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1);
+
+            if (cells > MAX_INDEXED_CELLS_PER_CONNECTION) {
+                overflowIds.push(conn.id);
+                continue;
+            }
+
+            for (let cx = minCellX; cx <= maxCellX; cx++) {
+                for (let cy = minCellY; cy <= maxCellY; cy++) {
+                    const key = toCellKey(cx, cy);
+                    const list = cellMap.get(key);
+                    if (list) {
+                        list.push(conn.id);
+                    } else {
+                        cellMap.set(key, [conn.id]);
+                    }
+                }
+            }
+        }
+
+        return { cellMap, boundsById, overflowIds };
+    }, [connections, nodeById]);
+
+    // Calculate visible nodes with spatial hash query
+    const visibleNodes = useMemo(() => {
+        if (viewportSize.width === 0 || viewportSize.height === 0) return nodes;
+
+        const cullBufferWorld = Math.max(
+            MIN_PRELOAD_NODE_BUFFER_WORLD,
+            VIEWPORT_CULL_BUFFER_PX / Math.max(transform.k, 0.001)
+        );
+        const viewportLeft = -transform.x / transform.k - cullBufferWorld;
+        const viewportTop = -transform.y / transform.k - cullBufferWorld;
+        const viewportRight = (viewportSize.width - transform.x) / transform.k + cullBufferWorld;
+        const viewportBottom = (viewportSize.height - transform.y) / transform.k + cullBufferWorld;
+
+        const minCellX = Math.floor(viewportLeft / SPATIAL_HASH_CELL_SIZE);
+        const maxCellX = Math.floor(viewportRight / SPATIAL_HASH_CELL_SIZE);
+        const minCellY = Math.floor(viewportTop / SPATIAL_HASH_CELL_SIZE);
+        const maxCellY = Math.floor(viewportBottom / SPATIAL_HASH_CELL_SIZE);
+
+        const seen = new Set<string>();
+        const result: NodeData[] = [];
+
+        const tryPush = (nodeId: string) => {
+            if (seen.has(nodeId)) return;
+            seen.add(nodeId);
+            const bounds = nodeSpatialIndex.boundsById.get(nodeId);
+            if (!bounds) return;
+            if (bounds.right < viewportLeft ||
+                bounds.left > viewportRight ||
+                bounds.bottom < viewportTop ||
+                bounds.top > viewportBottom) {
+                return;
+            }
+            result.push(bounds.node);
+        };
+
+        for (let cx = minCellX; cx <= maxCellX; cx++) {
+            for (let cy = minCellY; cy <= maxCellY; cy++) {
+                const ids = nodeSpatialIndex.cellMap.get(toCellKey(cx, cy));
+                if (!ids) continue;
+                for (const id of ids) tryPush(id);
+            }
+        }
+
+        for (const id of nodeSpatialIndex.overflowIds) tryPush(id);
+
+        result.sort((a, b) => (nodeOrderById.get(a.id) || 0) - (nodeOrderById.get(b.id) || 0));
+        return result;
+    }, [nodeSpatialIndex, nodeOrderById, transform, viewportSize]);
+
+    const visibleNodeIds = useMemo(() => new Set(visibleNodes.map(n => n.id)), [visibleNodes]);
+
+    // Calculate visible connections
+    const visibleConnections = useMemo(() => {
+        if (viewportSize.width === 0 || viewportSize.height === 0) return connections;
+
+        const cullBufferWorld = Math.max(
+            MIN_PRELOAD_NODE_BUFFER_WORLD,
+            VIEWPORT_CULL_BUFFER_PX / Math.max(transform.k, 0.001)
+        );
+        const viewportLeft = -transform.x / transform.k - cullBufferWorld;
+        const viewportTop = -transform.y / transform.k - cullBufferWorld;
+        const viewportRight = (viewportSize.width - transform.x) / transform.k + cullBufferWorld;
+        const viewportBottom = (viewportSize.height - transform.y) / transform.k + cullBufferWorld;
+
+        const minCellX = Math.floor(viewportLeft / SPATIAL_HASH_CELL_SIZE);
+        const maxCellX = Math.floor(viewportRight / SPATIAL_HASH_CELL_SIZE);
+        const minCellY = Math.floor(viewportTop / SPATIAL_HASH_CELL_SIZE);
+        const maxCellY = Math.floor(viewportBottom / SPATIAL_HASH_CELL_SIZE);
+
+        const seen = new Set<string>();
+        const result: Connection[] = [];
+
+        const tryPush = (connectionId: string) => {
+            if (seen.has(connectionId)) return;
+            seen.add(connectionId);
+            const bounds = connectionSpatialIndex.boundsById.get(connectionId);
+            if (!bounds) return;
+            if (bounds.right < viewportLeft ||
+                bounds.left > viewportRight ||
+                bounds.bottom < viewportTop ||
+                bounds.top > viewportBottom) {
+                return;
+            }
+            result.push(bounds.conn);
+        };
+
+        for (let cx = minCellX; cx <= maxCellX; cx++) {
+            for (let cy = minCellY; cy <= maxCellY; cy++) {
+                const ids = connectionSpatialIndex.cellMap.get(toCellKey(cx, cy));
+                if (!ids) continue;
+                for (const id of ids) tryPush(id);
+            }
+        }
+
+        for (const id of connectionSpatialIndex.overflowIds) tryPush(id);
+
+        result.sort((a, b) => (connectionOrderById.get(a.id) || 0) - (connectionOrderById.get(b.id) || 0));
+        return result;
+    }, [connectionSpatialIndex, connectionOrderById, transform, viewportSize]);
 
     return {
         // Core state
@@ -563,6 +798,7 @@ export const useCanvasState = () => {
         visibleNodes,
         visibleNodeIds,
         visibleConnections,
+        nodeById,
         
         // UI state
         previewMedia, setPreviewMedia,

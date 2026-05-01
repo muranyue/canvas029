@@ -2,6 +2,11 @@
 import { ModelConfig } from "./types";
 
 export const constructUrl = (baseUrl: string, endpointPath: string) => {
+    // If endpoint is already an absolute URL, keep it as-is.
+    if (/^https?:\/\//i.test(endpointPath)) {
+        return endpointPath;
+    }
+
     let base = baseUrl ? baseUrl.replace(/\/$/, '') : '';
     let path = endpointPath.replace(/^\//, '');
 

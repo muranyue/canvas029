@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { NodeData, CanvasTransform, Point, NodeType, Connection } from '../types';
 import { calculateImportDimensions, createDisplayImageSrc } from './useNodeOperations';
 
@@ -7,7 +7,7 @@ interface CanvasRefs {
     containerRef: { current: HTMLDivElement | null };
     dragStartRef: { current: { x: number; y: number; w?: number; h?: number; nodeId?: string; initialNodeX?: number; direction?: string } };
     initialTransformRef: { current: CanvasTransform };
-    initialNodePositionsRef: { current: { id: string; x: number; y: number }[] };
+    initialNodePositionsRef: { current: Map<string, { x: number; y: number }> };
     connectionStartRef: { current: { nodeId: string; type: 'source' | 'target' } | null };
     lastMousePosRef: { current: Point };
     replaceImageRef: { current: HTMLInputElement | null };
@@ -81,6 +81,38 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     const {
         addNode, generateId, createConnection,
     } = ops;
+
+    const transformLiveRef = useRef(transform);
+    const pendingTransformRef = useRef<CanvasTransform | null>(null);
+    const transformRafRef = useRef<number | null>(null);
+    const pendingNodeDragRef = useRef<{ id: string; clientX: number; clientY: number; selection: Set<string> } | null>(null);
+
+    useEffect(() => {
+        transformLiveRef.current = transform;
+    }, [transform]);
+
+    const flushScheduledTransform = useCallback(() => {
+        transformRafRef.current = null;
+        const next = pendingTransformRef.current;
+        if (!next) return;
+        pendingTransformRef.current = null;
+        setTransform(next);
+    }, [setTransform]);
+
+    const scheduleTransform = useCallback((next: CanvasTransform) => {
+        transformLiveRef.current = next;
+        pendingTransformRef.current = next;
+        if (transformRafRef.current !== null) return;
+        transformRafRef.current = window.requestAnimationFrame(flushScheduledTransform);
+    }, [flushScheduledTransform]);
+
+    useEffect(() => {
+        return () => {
+            if (transformRafRef.current !== null) {
+                window.cancelAnimationFrame(transformRafRef.current);
+            }
+        };
+    }, []);
 
     // ========== Quick Add Node ==========
     const handleQuickAddNode = useCallback((type: NodeType) => {
@@ -239,41 +271,45 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     // ========== Zoom ==========
     const handleZoom = useCallback((e: any) => {
+        const baseTransform = transformLiveRef.current;
         const newK = parseFloat(e.target.value);
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         const mouseX = rect.width / 2;
         const mouseY = rect.height / 2;
-        const worldX = (mouseX - transform.x) / transform.k;
-        const worldY = (mouseY - transform.y) / transform.k;
-        setTransform({ x: mouseX - worldX * newK, y: mouseY - worldY * newK, k: newK });
-    }, [transform, setTransform, containerRef]);
+        const worldX = (mouseX - baseTransform.x) / baseTransform.k;
+        const worldY = (mouseY - baseTransform.y) / baseTransform.k;
+        scheduleTransform({ x: mouseX - worldX * newK, y: mouseY - worldY * newK, k: newK });
+    }, [scheduleTransform, containerRef]);
 
     const handleResetZoom = useCallback(() => {
+        const baseTransform = transformLiveRef.current;
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         const mouseX = rect.width / 2;
         const mouseY = rect.height / 2;
-        const worldX = (mouseX - transform.x) / transform.k;
-        const worldY = (mouseY - transform.y) / transform.k;
-        setTransform({ x: mouseX - worldX, y: mouseY - worldY, k: 1 });
-    }, [transform, setTransform, containerRef]);
+        const worldX = (mouseX - baseTransform.x) / baseTransform.k;
+        const worldY = (mouseY - baseTransform.y) / baseTransform.k;
+        scheduleTransform({ x: mouseX - worldX, y: mouseY - worldY, k: 1 });
+    }, [scheduleTransform, containerRef]);
 
     const handleWheel = useCallback((e: any) => {
+        const baseTransform = transformLiveRef.current;
         if (e.ctrlKey || e.metaKey) e.preventDefault();
         const zoomIntensity = 0.1;
         const direction = e.deltaY > 0 ? -1 : 1;
-        let newK = transform.k + direction * zoomIntensity;
+        let newK = baseTransform.k + direction * zoomIntensity;
         newK = Math.min(Math.max(0.2, newK), 2);
         const rect = containerRef.current!.getBoundingClientRect();
-        const worldX = (e.clientX - rect.left - transform.x) / transform.k;
-        const worldY = (e.clientY - rect.top - transform.y) / transform.k;
-        setTransform({ x: (e.clientX - rect.left) - worldX * newK, y: (e.clientY - rect.top) - worldY * newK, k: newK });
-    }, [transform, setTransform, containerRef]);
+        const worldX = (e.clientX - rect.left - baseTransform.x) / baseTransform.k;
+        const worldY = (e.clientY - rect.top - baseTransform.y) / baseTransform.k;
+        scheduleTransform({ x: (e.clientX - rect.left) - worldX * newK, y: (e.clientY - rect.top) - worldY * newK, k: newK });
+    }, [scheduleTransform, containerRef]);
 
     const handleNavigate = useCallback((x: number, y: number) => {
-        setTransform(prev => ({ ...prev, x, y }));
-    }, [setTransform]);
+        const baseTransform = transformLiveRef.current;
+        scheduleTransform({ ...baseTransform, x, y });
+    }, [scheduleTransform]);
 
     const handleHistoryPreview = useCallback((url: string, type: 'image' | 'video') => setPreviewMedia({ url, type }), [setPreviewMedia]);
 
@@ -305,11 +341,22 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     const handleTouchMove = useCallback((e: any) => {
         if (e.touches.length === 1) {
+            if (pendingNodeDragRef.current && dragMode === 'NONE') {
+                const touch = e.touches[0];
+                const pending = pendingNodeDragRef.current;
+                const dx = touch.clientX - pending.clientX;
+                const dy = touch.clientY - pending.clientY;
+                if ((dx * dx) + (dy * dy) >= 16) {
+                    pendingNodeDragRef.current = null;
+                    startNodeDrag(pending.id, pending.clientX, pending.clientY, pending.selection);
+                    return;
+                }
+            }
             if (dragMode === 'PAN') {
                 const touch = e.touches[0];
                 const dx = touch.clientX - dragStartRef.current.x;
                 const dy = touch.clientY - dragStartRef.current.y;
-                setTransform({ ...initialTransformRef.current, x: initialTransformRef.current.x + dx, y: initialTransformRef.current.y + dy });
+                scheduleTransform({ ...initialTransformRef.current, x: initialTransformRef.current.x + dx, y: initialTransformRef.current.y + dy });
             } else if (dragMode === 'DRAG_NODE') {
                 const touch = e.touches[0];
                 const dx = (touch.clientX - dragStartRef.current.x) / transform.k;
@@ -317,7 +364,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 const movingNodeIds = draggingNodesRef.current;
                 setNodes(prev => prev.map(n => {
                     if (movingNodeIds.has(n.id)) {
-                        const initial = initialNodePositionsRef.current.find(init => init.id === n.id);
+                        const initial = initialNodePositionsRef.current.get(n.id);
                         if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy };
                     }
                     return n;
@@ -339,12 +386,13 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 const cy = touchStartRef.current.centerY - rect.top;
                 const worldX = (cx - initialTransformRef.current.x) / initialTransformRef.current.k;
                 const worldY = (cy - initialTransformRef.current.y) / initialTransformRef.current.k;
-                setTransform({ x: cx - worldX * newK, y: cy - worldY * newK, k: newK });
+                scheduleTransform({ x: cx - worldX * newK, y: cy - worldY * newK, k: newK });
             }
         }
-    }, [dragMode, transform, screenToWorld, setTransform, setNodes, setTempConnection, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, touchStartRef]);
+    }, [dragMode, transform, screenToWorld, scheduleTransform, setNodes, setTempConnection, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, touchStartRef, nodes]);
 
     const handleTouchEnd = useCallback((e: any) => {
+        pendingNodeDragRef.current = null;
         if (dragMode === 'CONNECT') {
             const touch = e.changedTouches[0];
             const worldPos = screenToWorld(touch.clientX, touch.clientY);
@@ -406,15 +454,26 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         const worldPos = screenToWorld(e.clientX, e.clientY);
         if (dragMode !== 'NONE' && e.buttons === 0) { setDragMode('NONE'); dragStartRef.current = { x: 0, y: 0 }; return; }
 
+        if (pendingNodeDragRef.current && dragMode === 'NONE' && (e.buttons & 1) === 1) {
+            const pending = pendingNodeDragRef.current;
+            const dx = e.clientX - pending.clientX;
+            const dy = e.clientY - pending.clientY;
+            if ((dx * dx) + (dy * dy) >= 16) {
+                pendingNodeDragRef.current = null;
+                startNodeDrag(pending.id, pending.clientX, pending.clientY, pending.selection);
+                return;
+            }
+        }
+
         if (dragMode === 'PAN') {
-            setTransform({ ...initialTransformRef.current, x: initialTransformRef.current.x + (e.clientX - dragStartRef.current.x), y: initialTransformRef.current.y + (e.clientY - dragStartRef.current.y) });
+            scheduleTransform({ ...initialTransformRef.current, x: initialTransformRef.current.x + (e.clientX - dragStartRef.current.x), y: initialTransformRef.current.y + (e.clientY - dragStartRef.current.y) });
         } else if (dragMode === 'DRAG_NODE') {
             const dx = (e.clientX - dragStartRef.current.x) / transform.k;
             const dy = (e.clientY - dragStartRef.current.y) / transform.k;
             const movingNodeIds = draggingNodesRef.current;
             setNodes(prev => prev.map(n => {
                 if (movingNodeIds.has(n.id)) {
-                    const initial = initialNodePositionsRef.current.find(init => init.id === n.id);
+                    const initial = initialNodePositionsRef.current.get(n.id);
                     if (initial) return { ...n, x: initial.x + dx, y: initial.y + dy };
                 }
                 return n;
@@ -466,9 +525,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 }
             }
         }
-    }, [dragMode, transform, nodes, screenToWorld, setDragMode, setTransform, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, connectionStartRef, lastMousePosRef]);
+    }, [dragMode, transform, nodes, screenToWorld, setDragMode, scheduleTransform, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, containerRef, dragStartRef, initialTransformRef, initialNodePositionsRef, draggingNodesRef, connectionStartRef, lastMousePosRef]);
 
     const handleMouseUp = useCallback((e: any) => {
+        pendingNodeDragRef.current = null;
         if (dragMode === 'CONNECT' && connectionStartRef.current?.type === 'source') {
             setQuickAddMenu({ sourceId: connectionStartRef.current.nodeId, x: e.clientX, y: e.clientY, worldX: screenToWorld(e.clientX, e.clientY).x, worldY: screenToWorld(e.clientX, e.clientY).y });
         }
@@ -501,21 +561,41 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (showColorPicker) setShowColorPicker(false);
     };
 
-    const startNodeDrag = (id: string, clientX: number, clientY: number, isShift: boolean) => {
+    const updateSelectionForPointerDown = (id: string, isShift: boolean) => {
+        const isAlreadySelected = selectedNodeIds.has(id);
+
+        // Keep the same Set reference when selection does not actually change.
+        if (!isShift && isAlreadySelected && selectedNodeIds.size === 1) {
+            return selectedNodeIds;
+        }
+
+        if (!isShift && isAlreadySelected) {
+            return selectedNodeIds;
+        }
+
+        const nextSelection = new Set(selectedNodeIds);
+        if (isShift) {
+            if (isAlreadySelected) {
+                nextSelection.delete(id);
+            } else {
+                nextSelection.add(id);
+            }
+        } else {
+            nextSelection.clear();
+            nextSelection.add(id);
+        }
+
+        setSelectedNodeIds(nextSelection);
+        return nextSelection;
+    };
+
+    const startNodeDrag = (id: string, clientX: number, clientY: number, selection: Set<string>) => {
         setDragMode('DRAG_NODE');
         dragStartRef.current = { x: clientX, y: clientY };
-
-        const isAlreadySelected = selectedNodeIds.has(id);
-        let newSelection = new Set(selectedNodeIds);
-
-        if (isShift) {
-            isAlreadySelected ? newSelection.delete(id) : newSelection.add(id);
-        } else {
-            if (!isAlreadySelected) { newSelection.clear(); newSelection.add(id); }
-        }
-        setSelectedNodeIds(newSelection);
+        const newSelection = selection;
 
         const nodesToDrag = new Set(newSelection);
+        const primaryNode = nodes.find(n => n.id === id);
         const groupIds = Array.from(newSelection).filter(nid => nodes.find(n => n.id === nid)?.type === NodeType.GROUP);
 
         if (groupIds.length > 0) {
@@ -536,16 +616,28 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         }
         draggingNodesRef.current = nodesToDrag;
 
-        setNodes(prev => {
-            const movingNodes = prev.filter(n => nodesToDrag.has(n.id));
-            const others = prev.filter(n => !nodesToDrag.has(n.id));
-            movingNodes.sort((a, b) => {
-                if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
-                if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
-                return 0;
+        const shouldReorder =
+            newSelection.size > 1 ||
+            groupIds.length > 0 ||
+            primaryNode?.type === NodeType.GROUP;
+
+        if (shouldReorder) {
+            setNodes(prev => {
+                const movingNodes = prev.filter(n => nodesToDrag.has(n.id));
+                const others = prev.filter(n => !nodesToDrag.has(n.id));
+                movingNodes.sort((a, b) => {
+                    if (a.type === NodeType.GROUP && b.type !== NodeType.GROUP) return -1;
+                    if (a.type !== NodeType.GROUP && b.type === NodeType.GROUP) return 1;
+                    return 0;
+                });
+                const next = [...others, ...movingNodes];
+
+                for (let i = 0; i < prev.length; i++) {
+                    if (prev[i] !== next[i]) return next;
+                }
+                return prev;
             });
-            return [...others, ...movingNodes];
-        });
+        }
 
         if (newSelection.size === 1) {
             const node = nodes.find(n => n.id === id);
@@ -554,7 +646,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             }
         }
 
-        initialNodePositionsRef.current = nodes.map(n => ({ id: n.id, x: n.x, y: n.y }));
+        initialNodePositionsRef.current = new Map(nodes.map(n => [n.id, { x: n.x, y: n.y }]));
     };
 
     const handleNodeMouseDown = useCallback((e: any, id: string) => {
@@ -563,7 +655,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (!target.closest('[data-drag-handle="true"]')) return;
         e.stopPropagation();
         clearMenus();
-        if (e.button === 0) startNodeDrag(id, e.clientX, e.clientY, e.shiftKey);
+        if (e.button === 0) {
+            const selection = updateSelectionForPointerDown(id, e.shiftKey);
+            pendingNodeDragRef.current = { id, clientX: e.clientX, clientY: e.clientY, selection };
+        }
     }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
 
     const handleNodeTouchStart = useCallback((e: any, id: string) => {
@@ -574,7 +669,8 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         clearMenus();
         if (e.touches.length === 1) {
             const touch = e.touches[0];
-            startNodeDrag(id, touch.clientX, touch.clientY, false);
+            const selection = updateSelectionForPointerDown(id, false);
+            pendingNodeDragRef.current = { id, clientX: touch.clientX, clientY: touch.clientY, selection };
         }
     }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
 
@@ -594,8 +690,8 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     const handleNodeClick = useCallback((e: any, id: string) => {
         const target = e.target as HTMLElement;
         if (target.closest('[data-interactive="true"]') || target.closest('.absolute.top-full') || target.closest('.absolute.bottom-full')) return;
-        if (!selectedNodeIds.has(id) && dragMode === 'NONE') setSelectedNodeIds(new Set([id]));
-    }, [selectedNodeIds, dragMode, setSelectedNodeIds]);
+        // Selection is handled on pointer down to avoid redundant click-time state updates.
+    }, []);
 
     const handleNodeContextMenu = useCallback((e: any, id: string, type: NodeType) => {
         e.stopPropagation(); e.preventDefault();

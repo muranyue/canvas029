@@ -1,10 +1,117 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NodeData, CanvasTransform, Point, NodeType } from '../types';
 import BaseNode from './Nodes/BaseNode';
 import { NodeContent } from './Nodes/NodeContent';
 import { Minimap } from './Minimap';
 import { GroupToolbar } from './GroupToolbar';
 import { Icons } from './Icons';
+
+function useStableCallback<T extends (...args: any[]) => any>(callback: T): T {
+    const callbackRef = useRef(callback);
+
+    useEffect(() => {
+        callbackRef.current = callback;
+    }, [callback]);
+
+    return useCallback(((...args: any[]) => callbackRef.current(...args)) as T, []);
+}
+
+interface CanvasNodeItemProps {
+    node: NodeData;
+    selected: boolean;
+    showControls: boolean;
+    inputs: { src: string; isVideo: boolean }[];
+    isDark: boolean;
+    isSelecting: boolean;
+    updateNodeData: (id: string, updates: Partial<NodeData>) => void;
+    handleGenerate: (id: string) => void;
+    handleMaximize: (id: string, setPreviewMedia: any) => void;
+    handleDownload: (id: string) => void;
+    handleUploadToAssetLibrary: (id: string) => void;
+    handleToolbarAction: (nodeId: string, action: string) => void;
+    handleUpload: (id: string) => void;
+    deleteNode: (id: string) => void;
+    setPreviewMedia: React.Dispatch<React.SetStateAction<{ url: string; type: 'image' | 'video' } | null>>;
+    handleNodeMouseDown: (e: React.MouseEvent, id: string) => void;
+    handleNodeTouchStart: (e: React.TouchEvent, id: string) => void;
+    handleNodeTouchEnd: (e: React.TouchEvent, id: string) => void;
+    handleNodeClick: (e: React.MouseEvent, id: string) => void;
+    handleNodeContextMenu: (e: React.MouseEvent, id: string, type: NodeType) => void;
+    handleResizeStart: (e: React.MouseEvent, nodeId: string, direction: string) => void;
+    handleConnectStart: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
+    handleConnectTouchStart: (e: React.TouchEvent, nodeId: string, type: 'source' | 'target') => void;
+    handlePortMouseUp: (e: React.MouseEvent, nodeId: string, type: 'source' | 'target') => void;
+    scale: number;
+}
+
+const CanvasNodeItem = React.memo(({
+    node,
+    selected,
+    showControls,
+    inputs,
+    isDark,
+    isSelecting,
+    updateNodeData,
+    handleGenerate,
+    handleMaximize,
+    handleDownload,
+    handleUploadToAssetLibrary,
+    handleToolbarAction,
+    handleUpload,
+    deleteNode,
+    setPreviewMedia,
+    handleNodeMouseDown,
+    handleNodeTouchStart,
+    handleNodeTouchEnd,
+    handleNodeClick,
+    handleNodeContextMenu,
+    handleResizeStart,
+    handleConnectStart,
+    handleConnectTouchStart,
+    handlePortMouseUp,
+    scale,
+}: CanvasNodeItemProps) => (
+    <BaseNode
+        data={node}
+        selected={selected}
+        onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
+        onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
+        onTouchEnd={(e) => handleNodeTouchEnd(e, node.id)}
+        onClick={(e) => handleNodeClick(e, node.id)}
+        onContextMenu={(e) => handleNodeContextMenu(e, node.id, node.type)}
+        onResizeStart={(e, dir) => handleResizeStart(e, node.id, dir)}
+        onConnectStart={(e, type) => handleConnectStart(e, node.id, type)}
+        onConnectTouchStart={(e, type) => handleConnectTouchStart(e, node.id, type)}
+        onPortMouseUp={(e, nodeId, type) => handlePortMouseUp(e, nodeId, type)}
+        isDark={isDark}
+        scale={scale}
+    >
+        <NodeContent
+            data={node}
+            updateData={updateNodeData}
+            onGenerate={handleGenerate}
+            selected={selected}
+            showControls={showControls}
+            inputs={inputs}
+            onMaximize={(id) => handleMaximize(id, setPreviewMedia)}
+            onDownload={handleDownload}
+            onUploadToAssetLibrary={handleUploadToAssetLibrary}
+            onDelete={deleteNode}
+            onToolbarAction={handleToolbarAction}
+            onUpload={handleUpload}
+            isDark={isDark}
+            isSelecting={isSelecting}
+        />
+    </BaseNode>
+), (prev, next) => {
+    return prev.node === next.node &&
+        prev.selected === next.selected &&
+        prev.showControls === next.showControls &&
+        prev.inputs === next.inputs &&
+        prev.isDark === next.isDark &&
+        prev.isSelecting === next.isSelecting &&
+        prev.scale === next.scale;
+});
 
 interface CanvasAreaProps {
     // Refs
@@ -15,6 +122,7 @@ interface CanvasAreaProps {
     nodes: NodeData[];
     visibleNodes: NodeData[];
     visibleConnections: { id: string; sourceId: string; targetId: string }[];
+    nodeById: Map<string, NodeData>;
     transform: CanvasTransform;
     canvasBg: string;
     selectedNodeIds: Set<string>;
@@ -34,6 +142,7 @@ interface CanvasAreaProps {
     handleGenerate: (id: string) => void;
     handleMaximize: (id: string, setPreviewMedia: any) => void;
     handleDownload: (id: string) => void;
+    handleUploadToAssetLibrary: (id: string) => void;
     handleToolbarAction: (nodeId: string, action: string) => void;
     handleUpload: (id: string) => void;
     deleteNode: (id: string) => void;
@@ -75,13 +184,13 @@ interface CanvasAreaProps {
     handleNavigate: (x: number, y: number) => void;
 }
 
-export const CanvasArea: React.FC<CanvasAreaProps> = ({
+const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
     containerRef, connectionStartRef, spacePressed,
-    nodes, visibleNodes, visibleConnections, transform, canvasBg,
+    nodes, visibleNodes, visibleConnections, nodeById, transform, canvasBg,
     selectedNodeIds, selectedConnectionId, selectionBox, dragMode,
     tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
     viewportSize, isDark,
-    getInputImages, updateNodeData, handleGenerate, handleMaximize, handleDownload,
+    getInputImages, updateNodeData, handleGenerate, handleMaximize, handleDownload, handleUploadToAssetLibrary,
     handleToolbarAction, handleUpload, deleteNode, setPreviewMedia, setSelectedConnectionId, setShowColorPicker,
     removeConnection, setShowMinimap,
     handleGroupSelection, handleUngroup, handleGroupColorChange, getSelectionCenter,
@@ -94,9 +203,46 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
 }) => {
     // Group Toolbar logic
     const isMultiSelect = selectedNodeIds.size > 1;
-    const singleGroupSelected = selectedNodeIds.size === 1 && nodes.find(n => n.id === Array.from(selectedNodeIds)[0])?.type === NodeType.GROUP;
+    const singleSelectedNodeId = selectedNodeIds.size === 1
+        ? selectedNodeIds.values().next().value ?? null
+        : null;
+    const singleGroupSelected = singleSelectedNodeId
+        ? nodeById.get(singleSelectedNodeId)?.type === NodeType.GROUP
+        : false;
     const showGroupToolbar = isMultiSelect || singleGroupSelected;
     const groupToolbarPos = showGroupToolbar ? getSelectionCenter(transform) : null;
+    const isSelecting = dragMode === 'SELECT' || dragMode === 'DRAG_NODE';
+    const [activeControlNodeId, setActiveControlNodeId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!singleSelectedNodeId || dragMode !== 'NONE') {
+            setActiveControlNodeId(null);
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setActiveControlNodeId(singleSelectedNodeId);
+        }, 120);
+
+        return () => window.clearTimeout(timer);
+    }, [singleSelectedNodeId, dragMode]);
+    const stableUpdateNodeData = useStableCallback(updateNodeData);
+    const stableHandleGenerate = useStableCallback(handleGenerate);
+    const stableHandleMaximize = useStableCallback(handleMaximize);
+    const stableHandleDownload = useStableCallback(handleDownload);
+    const stableHandleUploadToAssetLibrary = useStableCallback(handleUploadToAssetLibrary);
+    const stableHandleToolbarAction = useStableCallback(handleToolbarAction);
+    const stableHandleUpload = useStableCallback(handleUpload);
+    const stableDeleteNode = useStableCallback(deleteNode);
+    const stableHandleNodeMouseDown = useStableCallback(handleNodeMouseDown);
+    const stableHandleNodeTouchStart = useStableCallback(handleNodeTouchStart);
+    const stableHandleNodeTouchEnd = useStableCallback(handleNodeTouchEnd);
+    const stableHandleNodeClick = useStableCallback(handleNodeClick);
+    const stableHandleNodeContextMenu = useStableCallback(handleNodeContextMenu);
+    const stableHandleResizeStart = useStableCallback(handleResizeStart);
+    const stableHandleConnectStart = useStableCallback(handleConnectStart);
+    const stableHandleConnectTouchStart = useStableCallback(handleConnectTouchStart);
+    const stableHandlePortMouseUp = useStableCallback(handlePortMouseUp);
 
     return (
         <div
@@ -119,8 +265,8 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-0">
                 <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
                     {visibleConnections.map(conn => {
-                        const source = nodes.find(n => n.id === conn.sourceId);
-                        const target = nodes.find(n => n.id === conn.targetId);
+                        const source = nodeById.get(conn.sourceId);
+                        const target = nodeById.get(conn.targetId);
                         if (!source || !target) return null;
                         const sx = source.x + source.width;
                         const sy = source.y + source.height / 2;
@@ -143,7 +289,7 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                         );
                     })}
                     {dragMode === 'CONNECT' && connectionStartRef.current && tempConnection && (() => {
-                        const startNode = nodes.find(n => n.id === connectionStartRef.current?.nodeId);
+                        const startNode = nodeById.get(connectionStartRef.current?.nodeId || '');
                         if (!startNode) return null;
                         return (
                             <path d={`M ${startNode.x + startNode.width} ${startNode.y + startNode.height / 2} L ${tempConnection.x} ${tempConnection.y}`} stroke={isDark ? "#52525b" : "#a1a1aa"} strokeWidth={2} strokeDasharray="5,5" fill="none" />
@@ -158,40 +304,39 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}
             >
                 {/* Nodes */}
-                {visibleNodes.map(node => (
-                    <BaseNode
-                        key={node.id}
-                        data={node}
-                        selected={selectedNodeIds.has(node.id)}
-                        onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-                        onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
-                        onTouchEnd={(e) => handleNodeTouchEnd(e, node.id)}
-                        onClick={(e) => handleNodeClick(e, node.id)}
-                        onContextMenu={(e) => handleNodeContextMenu(e, node.id, node.type)}
-                        onResizeStart={(e, dir) => handleResizeStart(e, node.id, dir)}
-                        onConnectStart={(e, type) => handleConnectStart(e, node.id, type)}
-                        onConnectTouchStart={(e, type) => handleConnectTouchStart(e, node.id, type)}
-                        onPortMouseUp={(e, nodeId, type) => handlePortMouseUp(e, nodeId, type)}
-                        isDark={isDark}
-                        scale={transform.k}
-                    >
-                        <NodeContent
-                            data={node}
-                            updateData={updateNodeData}
-                            onGenerate={handleGenerate}
-                            selected={selectedNodeIds.has(node.id)}
-                            showControls={selectedNodeIds.size === 1 && selectedNodeIds.has(node.id)}
+                {visibleNodes.map(node => {
+                    const isNodeSelected = selectedNodeIds.has(node.id);
+                    return (
+                        <CanvasNodeItem
+                            key={node.id}
+                            node={node}
+                            selected={isNodeSelected}
+                            showControls={activeControlNodeId === node.id}
                             inputs={getInputImages(node.id)}
-                            onMaximize={(id) => handleMaximize(id, setPreviewMedia)}
-                            onDownload={handleDownload}
-                            onDelete={deleteNode}
-                            onToolbarAction={handleToolbarAction}
-                            onUpload={handleUpload}
                             isDark={isDark}
-                            isSelecting={dragMode === 'SELECT' || dragMode === 'DRAG_NODE'}
+                            isSelecting={isSelecting && isNodeSelected}
+                            updateNodeData={stableUpdateNodeData}
+                            handleGenerate={stableHandleGenerate}
+                            handleMaximize={stableHandleMaximize}
+                            handleDownload={stableHandleDownload}
+                            handleUploadToAssetLibrary={stableHandleUploadToAssetLibrary}
+                            handleToolbarAction={stableHandleToolbarAction}
+                            handleUpload={stableHandleUpload}
+                            deleteNode={stableDeleteNode}
+                            setPreviewMedia={setPreviewMedia}
+                            handleNodeMouseDown={stableHandleNodeMouseDown}
+                            handleNodeTouchStart={stableHandleNodeTouchStart}
+                            handleNodeTouchEnd={stableHandleNodeTouchEnd}
+                            handleNodeClick={stableHandleNodeClick}
+                            handleNodeContextMenu={stableHandleNodeContextMenu}
+                            handleResizeStart={stableHandleResizeStart}
+                            handleConnectStart={stableHandleConnectStart}
+                            handleConnectTouchStart={stableHandleConnectTouchStart}
+                            handlePortMouseUp={stableHandlePortMouseUp}
+                            scale={transform.k}
                         />
-                    </BaseNode>
-                ))}
+                    );
+                })}
 
                 {/* Suggested Nodes */}
                 {suggestedNodes.map(node => (
@@ -259,3 +404,23 @@ export const CanvasArea: React.FC<CanvasAreaProps> = ({
         </div>
     );
 };
+
+export const CanvasArea = React.memo(CanvasAreaComponent, (prev, next) => {
+    if (prev.transform !== next.transform) return false;
+    if (prev.visibleNodes !== next.visibleNodes) return false;
+    if (prev.visibleConnections !== next.visibleConnections) return false;
+    if (prev.selectedNodeIds !== next.selectedNodeIds) return false;
+    if (prev.selectedConnectionId !== next.selectedConnectionId) return false;
+    if (prev.dragMode !== next.dragMode) return false;
+    if (prev.tempConnection !== next.tempConnection) return false;
+    if (prev.suggestedNodes !== next.suggestedNodes) return false;
+    if (prev.selectionBox !== next.selectionBox) return false;
+    if (prev.showMinimap !== next.showMinimap) return false;
+    if (prev.showColorPicker !== next.showColorPicker) return false;
+    if (prev.nextGroupColor !== next.nextGroupColor) return false;
+    if (prev.viewportSize !== next.viewportSize) return false;
+    if (prev.canvasBg !== next.canvasBg) return false;
+    if (prev.isDark !== next.isDark) return false;
+    if (prev.nodeById !== next.nodeById) return false;
+    return true;
+});

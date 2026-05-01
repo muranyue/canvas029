@@ -24,6 +24,7 @@ export interface NodeData {
   outputArtifacts?: string[]; // Display history/Batch results
   outputOriginalArtifacts?: string[]; // Original history/Batch results
   isLoading?: boolean;
+  isUploadingAsset?: boolean;
   isStackOpen?: boolean; // UI State for expanded gallery
   
   // Configs

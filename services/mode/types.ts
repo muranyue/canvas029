@@ -17,6 +17,7 @@ export interface ModelDef {
   name: string; 
   type: StrategyType;
   category: 'IMAGE' | 'VIDEO';
+  defaultBaseUrl?: string;
   defaultEndpoint: string;
   defaultQueryEndpoint?: string; 
   defaultDownloadEndpoint?: string; 

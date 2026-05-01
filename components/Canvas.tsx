@@ -158,7 +158,7 @@ const Canvas: React.FC = () => {
                 inputImage = sourceNode.imageSrc;
             }
         }
-        const res = await generateVideo(node.prompt || '', inputImage ? [inputImage] : [], node.aspectRatio);
+        const res = await generateVideo(node.prompt || '', inputImage ? [inputImage] : [], [], node.aspectRatio);
         updateNodeData(nodeId, { videoSrc: res[0], isLoading: false });
       }
     } catch (e) {

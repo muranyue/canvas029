@@ -9,6 +9,7 @@ interface SidebarProps {
   onLoadWorkflow: () => void;
   onNewWorkflow: () => void;
   onImportAsset: () => void;
+  onOpenSd2AssetLibrary: () => void;
   onOpenSettings: (tab: string) => void;
   onUpdateCanvasBg: (color: string) => void;
   desktopPlatform: 'WIN' | 'MAC';
@@ -111,6 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLoadWorkflow, 
   onNewWorkflow,
   onImportAsset,
+  onOpenSd2AssetLibrary,
   onOpenSettings,
   onUpdateCanvasBg,
   desktopPlatform,
@@ -421,7 +423,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         title = "Assets";
         content = (
           <>
-            <SubMenuItem icon={Icons.Album} label="My Assets" onClick={() => {}} />
+            <SubMenuItem icon={Icons.Album} label="Asset Library" desc="SD2.0 Asset Library" onClick={() => { onOpenSd2AssetLibrary(); setActiveMenu(null); }} />
             <SubMenuItem icon={Icons.Upload} label="Import Asset" onClick={() => { onImportAsset(); setActiveMenu(null); }} />
           </>
         );
@@ -519,4 +521,18 @@ const Sidebar: React.FC<SidebarProps> = ({
   );
 };
 
-export default Sidebar;
+export default memo(Sidebar, (prev, next) => {
+  return prev.onAddNode === next.onAddNode &&
+    prev.onSaveWorkflow === next.onSaveWorkflow &&
+    prev.onLoadWorkflow === next.onLoadWorkflow &&
+    prev.onNewWorkflow === next.onNewWorkflow &&
+    prev.onImportAsset === next.onImportAsset &&
+    prev.onOpenSd2AssetLibrary === next.onOpenSd2AssetLibrary &&
+    prev.onOpenSettings === next.onOpenSettings &&
+    prev.onUpdateCanvasBg === next.onUpdateCanvasBg &&
+    prev.onToggleDesktopPlatform === next.onToggleDesktopPlatform &&
+    prev.onPreviewMedia === next.onPreviewMedia &&
+    prev.desktopPlatform === next.desktopPlatform &&
+    prev.isDark === next.isDark &&
+    prev.nodes === next.nodes;
+});

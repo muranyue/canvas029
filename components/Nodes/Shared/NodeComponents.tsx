@@ -73,21 +73,34 @@ export const InputThumbnails = memo(({ inputs, ready, isDark }: { inputs: string
 
 export const VideoPreview = ({ src, isDark }: { src: string, isDark: boolean }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
-    const [isPlaying, setIsPlaying] = useState(true);
+    const [isPlaying, setIsPlaying] = useState(false);
 
     const togglePlay = (e: React.MouseEvent) => {
         e.stopPropagation();
         const v = videoRef.current;
         if (v) {
             if (v.paused) {
-                v.play();
-                setIsPlaying(true);
+                void v.play();
             } else {
                 v.pause();
-                setIsPlaying(false);
             }
         }
     };
+
+    useEffect(() => {
+        const v = videoRef.current;
+        if (!v) return;
+        const onPlay = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        v.addEventListener('play', onPlay);
+        v.addEventListener('pause', onPause);
+        v.pause();
+        setIsPlaying(false);
+        return () => {
+            v.removeEventListener('play', onPlay);
+            v.removeEventListener('pause', onPause);
+        };
+    }, [src]);
 
     return (
         <div className="relative w-full h-full group/video">
@@ -97,11 +110,11 @@ export const VideoPreview = ({ src, isDark }: { src: string, isDark: boolean }) 
                 className="w-full h-full object-cover pointer-events-none" 
                 loop 
                 muted 
-                autoPlay 
                 playsInline 
+                preload="metadata"
                 draggable={false} 
             />
-            <div className="absolute bottom-3 left-3 z-30 pointer-events-auto opacity-0 group-hover/video:opacity-100 transition-opacity">
+            <div className="absolute bottom-3 left-3 z-30 pointer-events-auto opacity-100 group-hover/video:opacity-100 transition-opacity">
                 <button 
                     onClick={togglePlay}
                     className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md border transition-all shadow-sm ${isDark ? 'bg-black/60 border-white/10 text-white hover:bg-black/80 hover:scale-110' : 'bg-white/60 border-black/10 text-black hover:bg-white/80 hover:scale-110'}`}

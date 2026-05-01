@@ -1,7 +1,8 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { NodeData, Connection } from '../types';
 
 const EMPTY_ARRAY: { src: string, isVideo: boolean }[] = [];
+type InputEntry = { src: string; isVideo: boolean };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -24,23 +25,54 @@ export const useConnectionManager = ({
     setSuggestedNodes,
     setSelectedConnectionId,
 }: UseConnectionManagerProps) => {
-
-    // Memoize inputs map to prevent array recreation on every render
-    const inputsMap = useMemo(() => {
-        const map: Record<string, { src: string, isVideo: boolean }[]> = {};
-        nodes.forEach(node => {
-            map[node.id] = connections
-                .filter(c => c.targetId === node.id)
-                .map(c => nodes.find(n => n.id === c.sourceId))
-                .filter(n => n && (n.imageSrc || n.originalImageSrc || n.videoSrc))
-                .map(n => ({
-                    src: n!.videoSrc || n!.originalImageSrc || n!.imageSrc || '',
-                    isVideo: !!n!.videoSrc
-                }));
-        });
-
+    const sourceMediaById = useMemo(() => {
+        const map = new Map<string, InputEntry>();
+        for (const node of nodes) {
+            const src = node.videoSrc || node.originalImageSrc || node.imageSrc;
+            if (!src) continue;
+            map.set(node.id, { src, isVideo: !!node.videoSrc });
+        }
         return map;
-    }, [nodes, connections]);
+    }, [nodes]);
+
+    const previousInputsMapRef = useRef<Record<string, InputEntry[]>>({});
+
+    const isSameInputList = (a: InputEntry[] | undefined, b: InputEntry[]): boolean => {
+        if (!a || a.length !== b.length) return false;
+        for (let i = 0; i < b.length; i++) {
+            if (a[i].src !== b[i].src || a[i].isVideo !== b[i].isVideo) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // Build once per source-media/connections change while preserving stable array references
+    // for unchanged target nodes.
+    const inputsMap = useMemo(() => {
+        const nextMap: Record<string, InputEntry[]> = {};
+        const prevMap = previousInputsMapRef.current;
+
+        for (const conn of connections) {
+            const source = sourceMediaById.get(conn.sourceId);
+            if (!source) continue;
+            const targetList = nextMap[conn.targetId] || (nextMap[conn.targetId] = []);
+            targetList.push({
+                src: source.src,
+                isVideo: source.isVideo,
+            });
+        }
+
+        const stableMap: Record<string, InputEntry[]> = {};
+        for (const targetId of Object.keys(nextMap)) {
+            const nextList = nextMap[targetId];
+            const prevList = prevMap[targetId];
+            stableMap[targetId] = isSameInputList(prevList, nextList) ? prevList : nextList;
+        }
+
+        previousInputsMapRef.current = stableMap;
+        return stableMap;
+    }, [connections, sourceMediaById]);
 
     const getInputImages = useCallback((nodeId: string) => {
         return inputsMap[nodeId] || EMPTY_ARRAY;
