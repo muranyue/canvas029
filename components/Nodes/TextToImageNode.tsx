@@ -10,21 +10,34 @@ export interface PromptInputHandle {
     insertText: (text: string) => void;
 }
 
+const normalizePromptInput = (value: string): string =>
+    String(value || '')
+        .replace(/\u200B/g, '')
+        .replace(/\u00A0/g, ' ');
+
 // 使用纯 Selection/Range API 的 ContentEditablePromptInput - 不依赖 execCommand
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     value: string;
     onChange: (val: string) => void;
+    onBlur?: () => void;
     placeholder?: string;
     isDark: boolean;
-}>(({ value, onChange, placeholder, isDark }, ref) => {
+}>(({ value, onChange, onBlur, placeholder, isDark }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
     const isComposingRef = useRef(false);
     const isFocusingRef = useRef(false);
     const [showPlaceholder, setShowPlaceholder] = useState(true);
+    const [draftValue, setDraftValue] = useState(() => normalizePromptInput(value));
+    const draftValueRef = useRef(draftValue);
 
     const createChipHtml = (text: string) => {
         return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
     };
+
+    useEffect(() => {
+        draftValueRef.current = draftValue;
+        setShowPlaceholder(!draftValue || draftValue.trim().length === 0);
+    }, [draftValue]);
 
     // 纯 Selection/Range API 插入文本
     const insertAtCursor = (content: string, isHtml: boolean) => {
@@ -78,6 +91,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         
         // 触发 input 事件更新 value
         const newText = getPlainText(div);
+        setDraftValue(newText);
         onChange(newText);
     };
 
@@ -227,7 +241,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         // 如果正在聚焦过程中，阻止 blur
         if (isFocusingRef.current) {
             divRef.current?.focus();
+            return;
         }
+        onBlur?.();
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -300,7 +316,9 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
     const [deferredInputs, setDeferredInputs] = useState(false);
     const [isConfigured, setIsConfigured] = useState(true);
     const [imageModels, setImageModels] = useState<string[]>([]);
+    const [promptDraft, setPromptDraft] = useState(() => normalizePromptInput(data.prompt || ''));
     const inputRef = useRef<PromptInputHandle>(null);
+    const promptDraftRef = useRef(promptDraft);
 
     const isSelectedAndStable = selected && !isSelecting;
 
@@ -327,6 +345,45 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
     }, [checkConfig, updateModels]);
 
     useEffect(() => { if (isSelectedAndStable && showControls) { const t = setTimeout(() => setDeferredInputs(true), 100); return () => clearTimeout(t); } else setDeferredInputs(false); }, [isSelectedAndStable, showControls]);
+
+    const commitPromptToNode = useCallback((nextPrompt?: string) => {
+        const normalizedValue = normalizePromptInput(nextPrompt ?? promptDraftRef.current);
+        promptDraftRef.current = normalizedValue;
+        setPromptDraft(prev => (prev === normalizedValue ? prev : normalizedValue));
+        updateData(data.id, { prompt: normalizedValue });
+        return normalizedValue;
+    }, [data.id, updateData]);
+
+    useEffect(() => {
+        promptDraftRef.current = promptDraft;
+    }, [promptDraft]);
+
+    useEffect(() => {
+        const normalizedExternalPrompt = normalizePromptInput(data.prompt || '');
+        if (normalizedExternalPrompt === promptDraftRef.current) {
+            return;
+        }
+        setPromptDraft(normalizedExternalPrompt);
+        promptDraftRef.current = normalizedExternalPrompt;
+    }, [data.prompt]);
+
+    useEffect(() => {
+        if (!isSelectedAndStable || !showControls) {
+            commitPromptToNode();
+        }
+    }, [commitPromptToNode, isSelectedAndStable, showControls]);
+
+    const handlePromptChange = useCallback((value: string) => {
+        const normalizedValue = normalizePromptInput(value);
+        setPromptDraft(normalizedValue);
+        promptDraftRef.current = normalizedValue;
+    }, []);
+
+    const triggerGenerate = useCallback(() => {
+        if (data.isLoading || !isConfigured) return;
+        commitPromptToNode();
+        window.setTimeout(() => onGenerate(data.id), 0);
+    }, [commitPromptToNode, data.id, data.isLoading, isConfigured, onGenerate]);
 
     // Get Rules for current model
     const currentModel = data.model || 'BananaPro';
@@ -408,8 +465,9 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                       <div className="flex flex-col" data-interactive="true">
                           <ContentEditablePromptInput 
                               ref={inputRef}
-                              value={data.prompt || ''} 
-                              onChange={(val) => updateData(data.id, { prompt: val })} 
+                              value={promptDraft}
+                              onChange={handlePromptChange}
+                              onBlur={() => commitPromptToNode()}
                               isDark={isDark}
                               placeholder="Enter image description..."
                           />
@@ -479,12 +537,12 @@ export const TextToImageNode: React.FC<TextToImageNodeProps> = ({
                               onClick={(e) => { 
                                   // 防止 iOS 上 onClick 和 onTouchEnd 双重触发
                                   if ((e as any).nativeEvent?.pointerType === 'touch') return;
-                                  if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                                  triggerGenerate();
                               }} 
                               onTouchEnd={(e) => { 
                                   e.preventDefault(); 
                                   e.stopPropagation(); 
-                                  if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                                  triggerGenerate();
                               }} 
                               className={`ml-auto h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 whitespace-nowrap ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} 
                               disabled={data.isLoading || !isConfigured} 

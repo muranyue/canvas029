@@ -8,6 +8,7 @@ export interface Sd2AssetItem {
     assetId: string;
     status: string;
     assetType?: string;
+    sourceFingerprint?: string;
     groupId?: string;
     previewUrl?: string;
     sourceUrl?: string;
@@ -26,6 +27,38 @@ const SD2_ASSET_LIBRARY_KEY = "SD2_ASSET_LIBRARY_V1";
 const IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload";
 const IMGBB_API_KEY = "3fcc8e95dc5395ae49bfedcb59302ca1";
 const IMGBB_EXPIRATION_SECONDS = 3600;
+
+const getDefaultMimeByAssetType = (assetType: Sd2AssetType): string => {
+    if (assetType === "Video") return "video/mp4";
+    if (assetType === "Audio") return "audio/mpeg";
+    return "image/png";
+};
+
+const getExtensionForMimeType = (mime: string, assetType: Sd2AssetType): string => {
+    const value = String(mime || "").toLowerCase();
+    if (value.includes("png")) return "png";
+    if (value.includes("jpeg") || value.includes("jpg")) return "jpg";
+    if (value.includes("webp")) return "webp";
+    if (value.includes("gif")) return "gif";
+    if (value.includes("mp4")) return "mp4";
+    if (value.includes("webm")) return "webm";
+    if (value.includes("quicktime")) return "mov";
+    if (value.includes("mpeg")) return assetType === "Audio" ? "mp3" : "mpeg";
+    if (value.includes("wav")) return "wav";
+    if (value.includes("ogg")) return "ogg";
+    if (value.includes("flac")) return "flac";
+    return assetType === "Video" ? "mp4" : assetType === "Audio" ? "mp3" : "png";
+};
+
+export const getSd2AssetSourceFingerprint = (source: string, assetType?: Sd2AssetType | string): string => {
+    const input = `${String(assetType || "").toLowerCase()}::${String(source || "").trim()}`;
+    let hash = 2166136261;
+    for (let i = 0; i < input.length; i++) {
+        hash ^= input.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `${String(assetType || "").toLowerCase()}:${(hash >>> 0).toString(36)}`;
+};
 
 const createAssetResult = (response: any): { assetId: string; status: string } => {
     const data = parseResponseData(response);
@@ -159,7 +192,7 @@ const toImgbbImageParamFromSource = async (source: string): Promise<string> => {
     throw new Error("Unsupported image source format");
 };
 
-const uploadImageSourceToImgbb = async (source: string): Promise<string> => {
+export const uploadImageSourceToImgbb = async (source: string): Promise<string> => {
     const imageParam = await toImgbbImageParamFromSource(source);
     const form = new FormData();
     form.append("key", IMGBB_API_KEY);
@@ -185,6 +218,27 @@ const uploadImageSourceToImgbb = async (source: string): Promise<string> => {
     }
 
     return json.data.url as string;
+};
+
+const createFileFromMediaSource = async (source: string, assetType: Sd2AssetType): Promise<File> => {
+    const input = String(source || "").trim();
+    if (!input) throw new Error("Asset source is empty");
+
+    if (!input.startsWith("blob:") && !input.startsWith("data:") && !/^https?:\/\//i.test(input)) {
+        throw new Error("Unsupported media source format");
+    }
+
+    const res = await fetch(input);
+    if (!res.ok) {
+        throw new Error(`Failed to fetch media source (${res.status})`);
+    }
+
+    const blob = await res.blob();
+    const mimeType = blob.type || getDefaultMimeByAssetType(assetType);
+    const extension = getExtensionForMimeType(mimeType, assetType);
+    const fileName = `sd2-${String(assetType || "asset").toLowerCase()}-${Date.now()}.${extension}`;
+
+    return new File([blob], fileName, { type: mimeType });
 };
 
 const parseResponseData = (response: any): any => {
@@ -296,7 +350,7 @@ export const createSd2AssetFromMediaSource = async (
         };
     }
 
-    if (/^https?:\/\//i.test(input)) {
+    if (/^https?:\/\//i.test(input) && !isLikelyPrivateOrLocalHttpUrl(input)) {
         const created = await createSd2Asset(input, assetType);
         return {
             ...created,
@@ -304,7 +358,12 @@ export const createSd2AssetFromMediaSource = async (
         };
     }
 
-    throw new Error("Current media is local preview URL. Please upload from local file in asset library.");
+    const file = await createFileFromMediaSource(input, assetType);
+    const created = await createSd2AssetFromFile(file, assetType);
+    return {
+        ...created,
+        sourceUrl: input
+    };
 };
 
 export const querySd2Asset = async (assetId: string): Promise<Partial<Sd2AssetItem>> => {

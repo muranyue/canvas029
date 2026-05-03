@@ -607,7 +607,26 @@ export const useCanvasState = () => {
 
     // Update node data
     const updateNodeData = useCallback((id: string, updates: Partial<NodeData>) => {
-        setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+        if (!updates || Object.keys(updates).length === 0) return;
+        setNodes(prev => {
+            let changed = false;
+            const next = prev.map(n => {
+                if (n.id !== id) return n;
+
+                let hasDiff = false;
+                for (const key of Object.keys(updates) as (keyof NodeData)[]) {
+                    if (n[key] !== updates[key]) {
+                        hasDiff = true;
+                        break;
+                    }
+                }
+
+                if (!hasDiff) return n;
+                changed = true;
+                return { ...n, ...updates };
+            });
+            return changed ? next : prev;
+        });
     }, []);
 
     const nodeById = useMemo(() => {
@@ -636,7 +655,7 @@ export const useCanvasState = () => {
         const prevIndex = nodeSpatialIndexCacheRef.current;
         if (prevIndex && prevIndex.geometryById.size === nodes.length) {
             let geometryUnchanged = true;
-            let refsUnchanged = true;
+            const changedRefs: NodeData[] = [];
 
             for (const node of nodes) {
                 if (!matchesNodeBounds(prevIndex.geometryById.get(node.id), node)) {
@@ -644,27 +663,21 @@ export const useCanvasState = () => {
                     break;
                 }
 
-                if (refsUnchanged && prevIndex.boundsById.get(node.id)?.node !== node) {
-                    refsUnchanged = false;
+                if (prevIndex.boundsById.get(node.id)?.node !== node) {
+                    changedRefs.push(node);
                 }
             }
 
             if (geometryUnchanged) {
-                if (refsUnchanged) {
+                if (changedRefs.length === 0) {
                     return prevIndex;
                 }
 
-                const refreshedBoundsById = new Map<string, SpatialBounds & { node: NodeData }>();
-                for (const node of nodes) {
-                    const prevBounds = prevIndex.boundsById.get(node.id);
+                const refreshedBoundsById = new Map(prevIndex.boundsById);
+                for (const node of changedRefs) {
+                    const prevBounds = refreshedBoundsById.get(node.id);
                     if (!prevBounds) continue;
-                    refreshedBoundsById.set(node.id, {
-                        left: prevBounds.left,
-                        top: prevBounds.top,
-                        right: prevBounds.right,
-                        bottom: prevBounds.bottom,
-                        node,
-                    });
+                    refreshedBoundsById.set(node.id, { ...prevBounds, node });
                 }
 
                 const refreshedIndex: NodeSpatialIndexData = {

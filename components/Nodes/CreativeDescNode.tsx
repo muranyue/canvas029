@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { EditableTitle } from './Shared/NodeComponents';
+
+const normalizePromptInput = (value: string): string =>
+    String(value || '')
+        .replace(/\u200B/g, '')
+        .replace(/\u00A0/g, ' ');
 
 interface CreativeDescNodeProps {
   data: NodeData;
@@ -25,6 +30,47 @@ export const CreativeDescNode: React.FC<CreativeDescNodeProps> = ({
         : (isDark ? 'border-zinc-800' : 'border-gray-200');
     const controlPanelBg = isDark ? 'bg-[#18181B] border-zinc-700/80' : 'bg-white border-gray-200';
     const inputBg = isDark ? 'bg-zinc-900/50 hover:bg-zinc-900 border-transparent focus:border-zinc-700/50 text-zinc-200 placeholder-zinc-600' : 'bg-gray-50 hover:bg-gray-100 border-gray-200 focus:border-gray-300 text-gray-900 placeholder-gray-400';
+    const [promptDraft, setPromptDraft] = useState(() => normalizePromptInput(data.prompt || ''));
+    const promptDraftRef = useRef(promptDraft);
+
+    const commitPromptToNode = useCallback((nextPrompt?: string) => {
+        const normalizedValue = normalizePromptInput(nextPrompt ?? promptDraftRef.current);
+        promptDraftRef.current = normalizedValue;
+        setPromptDraft(prev => (prev === normalizedValue ? prev : normalizedValue));
+        updateData(data.id, { prompt: normalizedValue });
+        return normalizedValue;
+    }, [data.id, updateData]);
+
+    useEffect(() => {
+        promptDraftRef.current = promptDraft;
+    }, [promptDraft]);
+
+    useEffect(() => {
+        const normalizedExternalPrompt = normalizePromptInput(data.prompt || '');
+        if (normalizedExternalPrompt === promptDraftRef.current) {
+            return;
+        }
+        setPromptDraft(normalizedExternalPrompt);
+        promptDraftRef.current = normalizedExternalPrompt;
+    }, [data.prompt]);
+
+    useEffect(() => {
+        if (!selected || !showControls) {
+            commitPromptToNode();
+        }
+    }, [commitPromptToNode, selected, showControls]);
+
+    const handlePromptChange = useCallback((value: string) => {
+        const normalizedValue = normalizePromptInput(value);
+        setPromptDraft(normalizedValue);
+        promptDraftRef.current = normalizedValue;
+    }, []);
+
+    const triggerGenerate = useCallback(() => {
+        if (data.isLoading) return;
+        commitPromptToNode();
+        window.setTimeout(() => onGenerate(data.id), 0);
+    }, [commitPromptToNode, data.id, data.isLoading, onGenerate]);
 
     return (
         <>
@@ -39,8 +85,9 @@ export const CreativeDescNode: React.FC<CreativeDescNodeProps> = ({
               <textarea 
                   className={`w-full flex-1 border rounded-lg p-3 text-[10px] leading-relaxed resize-none focus:outline-none transition-colors no-scrollbar ${inputBg}`} 
                   placeholder="Enter your initial idea here..." 
-                  value={data.prompt || ''} 
-                  onChange={(e) => updateData(data.id, { prompt: e.target.value })} 
+                  value={promptDraft}
+                  onChange={(e) => handlePromptChange(e.target.value)}
+                  onBlur={() => commitPromptToNode()}
                   onMouseDown={(e) => e.stopPropagation()} 
                   onTouchStart={(e) => e.stopPropagation()}
                   onTouchEnd={(e) => {
@@ -54,7 +101,7 @@ export const CreativeDescNode: React.FC<CreativeDescNodeProps> = ({
                   data-interactive="true"
                   style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
               />
-              <button onClick={() => onGenerate(data.id)} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onGenerate(data.id); }} className="mt-3 w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 border border-cyan-500/20 transition-all" data-interactive="true">
+              <button onClick={triggerGenerate} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); triggerGenerate(); }} className="mt-3 w-full bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 text-xs font-bold py-2 rounded-lg flex items-center justify-center gap-2 border border-cyan-500/20 transition-all" data-interactive="true">
                   {data.isLoading ? <Icons.Loader2 className="animate-spin" size={12}/> : 'Optimize Prompt'}
               </button>
               {data.optimizedPrompt && isSelectedAndStable && showControls && (

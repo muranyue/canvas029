@@ -13,26 +13,41 @@ const videoToolbarItems = [
     { id: 'start_end', label: 'Start/End', icon: Icons.ArrowRightLeft },
     { id: 'all_reference', label: 'All Ref', icon: Icons.Layers },
     { id: 'region', label: 'Region', icon: Icons.Scan },
-    { id: 'camera', label: 'Camera', icon: Icons.Camera },
-    { id: 'role', label: 'Character', icon: Icons.User }
+    { id: 'camera', label: 'Camera', icon: Icons.Camera }
 ];
 
 const SD2_MODEL_SET = new Set(['SD 2.0 Fast', 'SD 2.0 Pro']);
 
-const extractTrailingAssetMention = (prompt: string): { query: string; start: number; end: number } | null => {
-    const text = String(prompt || '');
-    const match = text.match(/(^|\s)@([^\s@]*)$/);
-    if (!match || typeof match.index !== 'number') return null;
+const extractAssetMentionAtCursor = (prompt: string, cursorIndex?: number | null): { query: string; start: number; end: number } | null => {
+    const text = String(prompt || '')
+        .replace(/\u200B/g, '')
+        .replace(/\u00A0/g, ' ');
+    const rawCursor = typeof cursorIndex === 'number' ? cursorIndex : text.length;
+    const safeCursor = Math.max(0, Math.min(rawCursor, text.length));
 
-    const leading = match[1] || '';
-    const query = match[2] || '';
-    const start = match.index + leading.length;
-    return { query, start, end: text.length };
+    let start = safeCursor;
+    while (start > 0) {
+        const prev = text[start - 1];
+        if (prev === '@') {
+            start -= 1;
+            break;
+        }
+        if (/\s/.test(prev)) {
+            return null;
+        }
+        start -= 1;
+    }
+
+    if (start < 0 || text[start] !== '@') return null;
+    const query = text.slice(start + 1, safeCursor);
+    // Only replace what the user has typed up to the caret so trailing prose
+    // (especially CJK text without spaces) is preserved.
+    return { query, start, end: safeCursor };
 };
 
-const replaceTrailingAssetMentionWithAssetUri = (prompt: string, assetId: string): string => {
+const replaceAssetMentionWithAssetUri = (prompt: string, assetId: string, cursorIndex?: number | null): string => {
     const text = String(prompt || '');
-    const mention = extractTrailingAssetMention(text);
+    const mention = extractAssetMentionAtCursor(text, cursorIndex);
     const replacement = `asset://${assetId}`;
 
     if (!mention) {
@@ -40,8 +55,13 @@ const replaceTrailingAssetMentionWithAssetUri = (prompt: string, assetId: string
         return `${text}${text.endsWith(' ') ? '' : ' '}${replacement} `;
     }
 
-    return `${text.slice(0, mention.start)}${replacement} `;
+    return `${text.slice(0, mention.start)}${replacement} ${text.slice(mention.end)}`;
 };
+
+const normalizePromptInput = (value: string): string =>
+    String(value || '')
+        .replace(/\u200B/g, '')
+        .replace(/\u00A0/g, ' ');
 
 const getSdAssetPreviewUrl = (asset: Sd2AssetItem): string => {
     const type = String(asset.assetType || '').toLowerCase();
@@ -54,32 +74,6 @@ const getSdAssetPreviewUrl = (asset: Sd2AssetItem): string => {
         if (value) return value;
     }
     return '';
-};
-
-const getLastPathName = (value: string): string => {
-    try {
-        const raw = String(value || '').trim();
-        if (!raw) return '';
-        const parsed = raw.startsWith('http://') || raw.startsWith('https://') ? new URL(raw) : null;
-        const path = parsed ? parsed.pathname : raw;
-        const segment = path.split('/').filter(Boolean).pop() || '';
-        return decodeURIComponent(segment);
-    } catch (_err) {
-        return '';
-    }
-};
-
-const getSdAssetDisplayName = (asset: Sd2AssetItem, index: number): string => {
-    const localName = String(asset.localFileName || '').trim();
-    if (localName) return localName;
-
-    const fromSource = getLastPathName(String(asset.sourceUrl || ''));
-    if (fromSource) return fromSource;
-
-    const fromPreview = getLastPathName(String(asset.previewUrl || ''));
-    if (fromPreview) return fromPreview;
-
-    return `Asset ${index + 1}`;
 };
 
 interface TextToVideoNodeProps {
@@ -100,23 +94,75 @@ interface TextToVideoNodeProps {
 
 export interface PromptInputHandle {
     insertText: (text: string) => void;
+    getCursorIndex: () => number | null;
 }
 
-// 使用纯 Selection/Range API 的 ContentEditablePromptInput - 不依赖 execCommand
+// ContentEditable prompt input implemented with Selection/Range APIs (no execCommand).
 const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, { 
     value: string; 
     onChange: (val: string) => void; 
+    onBlur?: (val: string) => void;
     placeholder?: string;
     isDark: boolean;
-}>(({ value, onChange, placeholder, isDark }, ref) => {
+    assetLibrary?: Sd2AssetItem[];
+}>(({ value, onChange, onBlur, placeholder, isDark, assetLibrary = [] }, ref) => {
     const divRef = useRef<HTMLDivElement>(null);
     const isComposingRef = useRef(false);
     const isFocusingRef = useRef(false);
     const [showPlaceholder, setShowPlaceholder] = useState(true);
+    const [draftValue, setDraftValue] = useState(() => normalizePromptInput(value));
+    const draftValueRef = useRef(draftValue);
 
-    const createChipHtml = (text: string) => {
-        return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${text}">${text}</span>\u200B`;
-    };
+    const escapeHtml = useCallback((str: string) =>
+        str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+    , []);
+
+    const assetLookup = useMemo(() => {
+        const map = new Map<string, Sd2AssetItem>();
+        for (const item of assetLibrary) {
+            const key = String(item.assetId || '').trim().toLowerCase();
+            if (!key) continue;
+            if (!map.has(key)) {
+                map.set(key, item);
+            }
+        }
+        return map;
+    }, [assetLibrary]);
+
+    const createTokenChipHtml = useCallback((text: string) => {
+        const safe = escapeHtml(text);
+        return `<span class="inline-flex items-center justify-center h-5 px-1.5 mx-0.5 my-0.5 rounded-md bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold text-[10px] align-middle select-none chip transform translate-y-[-1px]" contenteditable="false" data-value="${safe}">${safe}</span>\u200B`;
+    }, [escapeHtml]);
+
+    const createAssetChipHtml = useCallback((text: string) => {
+        const safeToken = escapeHtml(text);
+        const assetId = String(text || '').replace(/^asset:\/\//i, '').trim();
+        const lookupKey = assetId.toLowerCase();
+        const asset = assetLookup.get(lookupKey);
+        const previewUrl = asset ? getSdAssetPreviewUrl(asset) : '';
+        const thumbHtml = previewUrl
+            ? `<img src="${escapeHtml(previewUrl)}" alt="" draggable="false" class="w-full h-full object-cover" />`
+            : '<span class="text-[8px] font-bold text-zinc-400">ASSET</span>';
+
+        return `<span class="inline-flex items-center h-6 px-1.5 mx-0.5 my-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 align-middle select-none chip" contenteditable="false" data-value="${safeToken}"><span class="w-4 h-4 rounded overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700 flex items-center justify-center">${thumbHtml}</span></span>\u200B`;
+    }, [assetLookup, escapeHtml]);
+
+    const createChipHtml = useCallback((text: string) => {
+        if (text.toLowerCase().startsWith('asset://')) {
+            return createAssetChipHtml(text);
+        }
+        return createTokenChipHtml(text);
+    }, [createAssetChipHtml, createTokenChipHtml]);
+
+    useEffect(() => {
+        draftValueRef.current = draftValue;
+        setShowPlaceholder(!draftValue || draftValue.trim().length === 0);
+    }, [draftValue]);
 
     const getPlainText = (node: Node): string => {
         let text = '';
@@ -139,7 +185,21 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         return text;
     };
 
-    // 纯 Selection/Range API 插入文本
+    const getCursorIndex = useCallback((): number | null => {
+        const div = divRef.current;
+        const sel = window.getSelection();
+        if (!div || !sel || sel.rangeCount === 0) return null;
+
+        const range = sel.getRangeAt(0);
+        if (!div.contains(range.startContainer)) return null;
+
+        const preRange = range.cloneRange();
+        preRange.selectNodeContents(div);
+        preRange.setEnd(range.startContainer, range.startOffset);
+        return getPlainText(preRange.cloneContents()).length;
+    }, []);
+
+    // Insert text/html using the Selection/Range APIs.
     const insertAtCursor = (content: string, isHtml: boolean) => {
         const div = divRef.current;
         if (!div) return;
@@ -147,11 +207,11 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         const sel = window.getSelection();
         if (!sel) return;
         
-        // 确保有选区
+        // Ensure there is an active range.
         let range: Range;
         if (sel.rangeCount > 0) {
             range = sel.getRangeAt(0);
-            // 确保选区在当前 div 内
+            // Ensure the range is inside the current editable div.
             if (!div.contains(range.commonAncestorContainer)) {
                 range = document.createRange();
                 range.selectNodeContents(div);
@@ -189,8 +249,9 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // 触发 input 事件更新 value
+        // Trigger value sync via onChange.
         const newText = getPlainText(div);
+        setDraftValue(newText);
         onChange(newText);
     };
 
@@ -198,44 +259,90 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         insertText: (text: string) => {
             if (divRef.current) {
                 divRef.current.focus();
-                // 使用 setTimeout 确保 focus 生效
+                // Delay insertion until focus is applied.
                 setTimeout(() => {
-                    if (text.startsWith('@')) {
+                    if (text.startsWith('@') || text.toLowerCase().startsWith('asset://')) {
                         insertAtCursor(createChipHtml(text), true);
                     } else {
                         insertAtCursor(text, false);
                     }
                 }, 0);
             }
-        }
-    }));
+        },
+        getCursorIndex,
+    }), [createChipHtml, getCursorIndex]);
 
-    const parseTextToHtml = (text: string) => {
+    const parseTextToHtml = useCallback((text: string) => {
         if (!text) return '';
-        const regex = /(@(?:image|video)\s+\d+)/gi;
-        const escapeHtml = (str: string) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        
+        const regex = /(asset:\/\/[^\s]+|@(?:image|video)\s+\d+)/gi;
+
         return text.split(regex).map(part => {
-            if (part.match(regex)) {
+            if (/^asset:\/\/[^\s]+$/i.test(part) || /^@(?:image|video)\s+\d+$/i.test(part)) {
                 return createChipHtml(part);
             }
             return escapeHtml(part);
         }).join('').replace(/\n/g, '<br>');
-    };
+    }, [createChipHtml, escapeHtml]);
 
-    useEffect(() => {
-        if (divRef.current && document.activeElement !== divRef.current) {
-            const currentText = getPlainText(divRef.current);
-            const normalizedValue = value.replace(/\s+/g, ' ');
-            const normalizedCurrent = currentText.replace(/\s+/g, ' ');
+    const syncDomToValue = useCallback((nextValue: string, preserveSelection = false) => {
+        const div = divRef.current;
+        if (!div) {
+            setShowPlaceholder(!nextValue || nextValue.trim().length === 0);
+            return;
+        }
 
-            if (normalizedValue !== normalizedCurrent) {
-                divRef.current.innerHTML = parseTextToHtml(value);
+        const normalizedValue = normalizePromptInput(nextValue);
+        const currentText = normalizePromptInput(getPlainText(div));
+        const normalizedCurrent = currentText.replace(/\s+/g, ' ').trim();
+        const comparableValue = normalizedValue.replace(/\s+/g, ' ').trim();
+        const shouldRewriteDom = normalizedCurrent !== comparableValue || (!normalizedValue && div.innerHTML !== '');
+
+        if (shouldRewriteDom) {
+            div.innerHTML = normalizedValue ? parseTextToHtml(normalizedValue) : '';
+        }
+
+        if (preserveSelection && document.activeElement === div) {
+            const sel = window.getSelection();
+            if (sel) {
+                const range = document.createRange();
+                range.selectNodeContents(div);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
             }
         }
-        // 同步更新 placeholder 状态
-        setShowPlaceholder(!value || value.trim().length === 0);
-    }, [value]);
+
+        setShowPlaceholder(!normalizedValue || normalizedValue.trim().length === 0);
+    }, [parseTextToHtml]);
+
+    useEffect(() => {
+        const normalizedValue = normalizePromptInput(value);
+        if (normalizedValue !== draftValueRef.current) {
+            setDraftValue(normalizedValue);
+            draftValueRef.current = normalizedValue;
+        }
+
+        const div = divRef.current;
+        if (!div) {
+            setShowPlaceholder(!normalizedValue || normalizedValue.trim().length === 0);
+            return;
+        }
+
+        const currentText = normalizePromptInput(getPlainText(div));
+        const isFocused = document.activeElement === div;
+        const hasRenderableTokens = /(asset:\/\/[^\s]+|@(?:image|video)\s+\d+)/i.test(normalizedValue);
+        const domLooksEmpty = currentText.length === 0;
+        const normalizedCurrent = currentText.replace(/\s+/g, ' ').trim();
+        const comparableValue = normalizedValue.replace(/\s+/g, ' ').trim();
+
+        if (normalizedCurrent !== comparableValue && (!isFocused || hasRenderableTokens || domLooksEmpty)) {
+            syncDomToValue(normalizedValue, isFocused);
+            return;
+        }
+
+        setShowPlaceholder(!normalizedValue || normalizedValue.trim().length === 0);
+    }, [value, syncDomToValue]);
+
 
     const updatePlaceholderVisibility = useCallback(() => {
         if (divRef.current) {
@@ -247,6 +354,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
         if (isComposingRef.current) return;
         const newText = getPlainText(e.currentTarget);
+        setDraftValue(newText);
         onChange(newText);
         updatePlaceholderVisibility();
     };
@@ -260,14 +368,14 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation();
         
-        // iOS 删除胶囊体时的光标修复
+        // iOS cursor fix when deleting chips.
         if (e.key === 'Backspace' || e.key === 'Delete') {
             const sel = window.getSelection();
             if (sel && sel.rangeCount > 0) {
                 const range = sel.getRangeAt(0);
                 const container = range.startContainer;
                 
-                // 检查是否在胶囊体旁边
+                // Check whether cursor is next to a chip spacer.
                 if (container.nodeType === Node.TEXT_NODE && container.textContent === '\u200B') {
                     const prev = container.previousSibling as HTMLElement;
                     if (prev && prev.classList?.contains('chip')) {
@@ -275,10 +383,11 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                         prev.parentNode?.removeChild(prev);
                         container.parentNode?.removeChild(container);
                         const newText = getPlainText(divRef.current!);
+                        setDraftValue(newText);
                         onChange(newText);
                         updatePlaceholderVisibility();
                         
-                        // 延迟恢复光标到末尾
+                        // Restore cursor position on the next tick.
                         setTimeout(() => {
                             if (divRef.current) {
                                 const newRange = document.createRange();
@@ -292,7 +401,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                     }
                 }
             }
-            // 延迟更新 placeholder 状态
+            // Delay placeholder refresh after deletion.
             setTimeout(updatePlaceholderVisibility, 0);
         }
     };
@@ -304,10 +413,11 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const handleCompositionEnd = (e: React.CompositionEvent<HTMLDivElement>) => {
         isComposingRef.current = false;
         const newText = getPlainText(e.currentTarget);
+        setDraftValue(newText);
         onChange(newText);
     };
 
-    // iOS 专用：防止键盘弹出后被收回
+    // iOS-specific: avoid blur bounce after keyboard opens.
     const handleFocus = () => {
         isFocusingRef.current = true;
         setTimeout(() => {
@@ -316,10 +426,16 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     };
 
     const handleBlur = () => {
-        // 如果正在聚焦过程中，阻止 blur
+        // Prevent blur while focus handoff is in progress.
         if (isFocusingRef.current) {
             divRef.current?.focus();
+            return;
         }
+        const normalizedValue = normalizePromptInput(divRef.current ? getPlainText(divRef.current) : draftValueRef.current);
+        setDraftValue(normalizedValue);
+        draftValueRef.current = normalizedValue;
+        syncDomToValue(normalizedValue, false);
+        onBlur?.(normalizedValue);
     };
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
@@ -349,7 +465,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 onBlur={handleBlur}
                 onTouchEnd={(e) => {
                     e.stopPropagation();
-                    // iOS: 延迟 focus 以避免键盘弹出后被收回
+                    // iOS: delay focus to avoid keyboard collapsing.
                     setTimeout(() => {
                         if (divRef.current && document.activeElement !== divRef.current) {
                             divRef.current.focus();
@@ -379,9 +495,13 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     const [isConfigured, setIsConfigured] = useState(true);
     const [videoModels, setVideoModels] = useState<string[]>([]);
     const [assetMentionQuery, setAssetMentionQuery] = useState<string | null>(null);
+    const [sdAssetLibrary, setSdAssetLibrary] = useState<Sd2AssetItem[]>([]);
     const [sdAssetSuggestions, setSdAssetSuggestions] = useState<Sd2AssetItem[]>([]);
+    const [promptDraft, setPromptDraft] = useState(() => normalizePromptInput(data.prompt || ''));
     
     const inputRef = useRef<PromptInputHandle>(null);
+    const promptDraftRef = useRef(promptDraft);
+    const assetMentionCursorRef = useRef<number | null>(null);
     const isSelectedAndStable = selected && !isSelecting;
     const isSd2Model = SD2_MODEL_SET.has(data.model || 'Sora 2');
 
@@ -450,20 +570,33 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
     useEffect(() => {
         if (!isSd2Model) {
             setAssetMentionQuery(null);
+            setSdAssetLibrary([]);
             setSdAssetSuggestions([]);
+            return;
         }
+        setSdAssetLibrary(loadSd2AssetLibrary());
     }, [isSd2Model]);
 
-    const handlePromptChange = useCallback((value: string) => {
-        updateData(data.id, { prompt: value });
+    const commitPromptToNode = useCallback((nextPrompt?: string) => {
+        const normalizedValue = normalizePromptInput(nextPrompt ?? promptDraftRef.current);
+        promptDraftRef.current = normalizedValue;
+        setPromptDraft(prev => (prev === normalizedValue ? prev : normalizedValue));
+        updateData(data.id, { prompt: normalizedValue });
+        return normalizedValue;
+    }, [data.id, updateData]);
 
+    useEffect(() => {
+        promptDraftRef.current = promptDraft;
+    }, [promptDraft]);
+
+    const updateSdAssetMentionState = useCallback((normalizedValue: string) => {
         if (!isSd2Model) {
             setAssetMentionQuery(null);
             setSdAssetSuggestions([]);
             return;
         }
 
-        const mention = extractTrailingAssetMention(value);
+        const mention = extractAssetMentionAtCursor(normalizedValue, assetMentionCursorRef.current);
         if (!mention) {
             setAssetMentionQuery(null);
             setSdAssetSuggestions([]);
@@ -471,7 +604,10 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         }
 
         const query = mention.query.trim().toLowerCase();
-        const library = loadSd2AssetLibrary();
+        const library = sdAssetLibrary.length > 0 ? sdAssetLibrary : loadSd2AssetLibrary();
+        if (sdAssetLibrary.length === 0 && library.length > 0) {
+            setSdAssetLibrary(library);
+        }
         const filtered = query
             ? library.filter((item) => {
                 const searchPool = [
@@ -489,15 +625,48 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
             : library;
 
         setAssetMentionQuery(mention.query);
-        setSdAssetSuggestions(filtered.slice(0, 8));
-    }, [data.id, isSd2Model, updateData]);
+        setSdAssetSuggestions(filtered);
+    }, [isSd2Model, sdAssetLibrary]);
+
+    useEffect(() => {
+        const normalizedExternalPrompt = normalizePromptInput(data.prompt || '');
+        if (normalizedExternalPrompt === promptDraftRef.current) {
+            return;
+        }
+
+        setPromptDraft(normalizedExternalPrompt);
+        promptDraftRef.current = normalizedExternalPrompt;
+        updateSdAssetMentionState(normalizedExternalPrompt);
+    }, [data.prompt, updateSdAssetMentionState]);
+
+    useEffect(() => {
+        if (!isSd2Model || assetMentionQuery === null) return;
+        updateSdAssetMentionState(promptDraftRef.current);
+    }, [assetMentionQuery, isSd2Model, sdAssetLibrary, updateSdAssetMentionState]);
+
+    const handlePromptChange = useCallback((value: string) => {
+        const normalizedValue = normalizePromptInput(value);
+        setPromptDraft(normalizedValue);
+        promptDraftRef.current = normalizedValue;
+        assetMentionCursorRef.current = inputRef.current?.getCursorIndex() ?? normalizedValue.length;
+        updateSdAssetMentionState(normalizedValue);
+    }, [updateSdAssetMentionState]);
 
     const handleAssetSuggestionSelect = useCallback((assetId: string) => {
-        const nextPrompt = replaceTrailingAssetMentionWithAssetUri(data.prompt || '', assetId);
-        updateData(data.id, { prompt: nextPrompt });
+        const nextPrompt = normalizePromptInput(replaceAssetMentionWithAssetUri(promptDraftRef.current, assetId, assetMentionCursorRef.current));
+        setPromptDraft(nextPrompt);
+        promptDraftRef.current = nextPrompt;
+        assetMentionCursorRef.current = nextPrompt.length;
+        commitPromptToNode(nextPrompt);
         setAssetMentionQuery(null);
         setSdAssetSuggestions([]);
-    }, [data.id, data.prompt, updateData]);
+    }, [commitPromptToNode]);
+
+    const triggerGenerate = useCallback(() => {
+        if (data.isLoading || !isConfigured) return;
+        commitPromptToNode();
+        window.setTimeout(() => onGenerate(data.id), 0);
+    }, [commitPromptToNode, data.id, data.isLoading, isConfigured, onGenerate]);
 
     const handleRatioChange = (ratio: string) => {
         if (!ratio.includes(':')) {
@@ -545,13 +714,22 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         if (inputRef.current) {
             inputRef.current.insertText(token);
         } else {
-            const currentPrompt = data.prompt || '';
-            updateData(data.id, { prompt: currentPrompt + token });
+            const nextPrompt = normalizePromptInput(`${promptDraftRef.current}${token}`);
+            setPromptDraft(nextPrompt);
+            promptDraftRef.current = nextPrompt;
+            assetMentionCursorRef.current = nextPrompt.length;
+            updateSdAssetMentionState(nextPrompt);
+            commitPromptToNode(nextPrompt);
         }
     };
 
     const isStartEndDisabled = inputs.length > 2;
     useEffect(() => { if (data.activeToolbarItem === 'start_end' && isStartEndDisabled) updateData(data.id, { activeToolbarItem: undefined }); }, [data.id, data.activeToolbarItem, isStartEndDisabled, updateData]);
+    useEffect(() => {
+        if (!isSelectedAndStable || !showControls) {
+            commitPromptToNode();
+        }
+    }, [commitPromptToNode, isSelectedAndStable, showControls]);
 
     const currentModel = data.model || 'Sora 2';
     const handler = VIDEO_HANDLERS[currentModel] || VIDEO_HANDLERS['Sora 2'];
@@ -661,10 +839,12 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                   <div className="flex flex-col" data-interactive="true">
                       <ContentEditablePromptInput 
                           ref={inputRef}
-                          value={data.prompt || ''} 
+                          value={promptDraft}
                           onChange={handlePromptChange}
+                          onBlur={(value) => commitPromptToNode(value)}
                           isDark={isDark}
                           placeholder="Describe the video scene..."
+                          assetLibrary={sdAssetLibrary}
                       />
                       {shouldShowSdAssetSuggestions && (
                           <div
@@ -677,16 +857,37 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                                   SD 2.0 Assets
                               </div>
                               {sdAssetSuggestions.length > 0 ? (
-                                  <div className="max-h-36 overflow-y-auto">
-                                      {sdAssetSuggestions.map((asset, index) => (
-                                          <button
-                                              key={asset.assetId}
-                                              type="button"
-                                              onClick={() => handleAssetSuggestionSelect(asset.assetId)}
-                                              className={`w-full text-left px-2 py-1.5 text-[11px] transition-colors flex items-center gap-2 ${isDark ? 'hover:bg-zinc-800 text-zinc-200' : 'hover:bg-gray-50 text-gray-800'}`}
-                                              data-interactive="true"
-                                          >
-                                              <div className={`w-10 h-10 rounded-md overflow-hidden border shrink-0 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'}`}>
+                                  <div
+                                      className="max-h-44 overflow-y-auto p-2"
+                                      onWheel={(e) => {
+                                          e.stopPropagation();
+                                          const el = e.currentTarget;
+                                          const canScroll = el.scrollHeight > el.clientHeight;
+                                          if (canScroll) e.preventDefault();
+                                      }}
+                                  >
+                                      <div className="grid grid-cols-4 gap-2">
+                                          {sdAssetSuggestions.map((asset) => (
+                                            <button
+                                                key={asset.assetId}
+                                                type="button"
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                }}
+                                                onClick={() => handleAssetSuggestionSelect(asset.assetId)}
+                                                onTouchStart={(e) => {
+                                                    e.stopPropagation();
+                                                }}
+                                                onTouchEnd={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleAssetSuggestionSelect(asset.assetId);
+                                                }}
+                                                className={`relative aspect-square rounded-lg overflow-hidden border transition-all group ${isDark ? 'bg-zinc-800 border-zinc-700 hover:border-cyan-500/60 hover:shadow-[0_0_0_1px_rgba(6,182,212,0.35)]' : 'bg-gray-100 border-gray-200 hover:border-cyan-300 hover:shadow-[0_0_0_1px_rgba(34,211,238,0.35)]'}`}
+                                                data-interactive="true"
+                                                title={asset.assetId}
+                                              >
                                                   {getSdAssetPreviewUrl(asset) ? (
                                                       <img
                                                           src={getSdAssetPreviewUrl(asset)}
@@ -696,18 +897,13 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                                                       />
                                                   ) : (
                                                       <div className={`w-full h-full flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                                          <Icons.Image size={14} />
+                                                          <Icons.Image size={16} />
                                                       </div>
                                                   )}
-                                              </div>
-                                              <div className="min-w-0">
-                                                  <div className="font-semibold truncate">{getSdAssetDisplayName(asset, index)}</div>
-                                                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                                                      {(asset.assetType || 'Unknown')} - {(asset.status || 'Unknown')}
-                                                  </div>
-                                              </div>
-                                          </button>
-                                      ))}
+                                                  <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                              </button>
+                                          ))}
+                                      </div>
                                   </div>
                               ) : (
                                   <div className={`px-2 py-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
@@ -780,14 +976,14 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
                        </div>
                        <button 
                            onClick={(e) => { 
-                               // 防止 iOS 上 onClick 和 onTouchEnd 双重触发
+                               // Prevent duplicate trigger from click + touchend on iOS.
                                if ((e as any).nativeEvent?.pointerType === 'touch') return;
-                               if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                               triggerGenerate();
                            }} 
                            onTouchEnd={(e) => { 
                                e.preventDefault(); 
                                e.stopPropagation(); 
-                               if (!data.isLoading && isConfigured) onGenerate(data.id); 
+                               triggerGenerate();
                            }} 
                            className={`ml-auto relative h-7 px-4 text-[10px] font-extrabold rounded-full flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-cyan-500/20 overflow-hidden min-w-[90px] ${data.isLoading || !isConfigured ? 'opacity-50 cursor-not-allowed bg-zinc-500 text-white' : 'bg-cyan-500 hover:bg-cyan-400 hover:shadow-cyan-500/40 text-white'}`} 
                            disabled={data.isLoading || !isConfigured} 

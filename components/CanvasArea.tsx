@@ -319,7 +319,7 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
 
             {/* Canvas Content - Nodes */}
             <div
-                className="absolute origin-top-left will-change-transform"
+                className="absolute origin-top-left"
                 style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.k})` }}
             >
                 {/* Nodes */}

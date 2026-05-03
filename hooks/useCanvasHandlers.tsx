@@ -98,6 +98,12 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         transformLiveRef.current = transform;
     }, [transform]);
 
+    // Snap zoom ratio to stable steps to reduce text/icon blur at problematic fractional scales.
+    const snapZoomScale = useCallback((value: number): number => {
+        const clamped = Math.min(Math.max(0.2, value), 2.5);
+        return Math.round(clamped * 20) / 20; // 0.05 step
+    }, []);
+
     const flushScheduledTransform = useCallback(() => {
         transformRafRef.current = null;
         const next = pendingTransformRef.current;
@@ -442,7 +448,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     // ========== Zoom ==========
     const handleZoom = useCallback((e: any) => {
         const baseTransform = transformLiveRef.current;
-        const newK = parseFloat(e.target.value);
+        const newK = snapZoomScale(parseFloat(e.target.value));
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         const mouseX = rect.width / 2;
@@ -450,7 +456,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         const worldX = (mouseX - baseTransform.x) / baseTransform.k;
         const worldY = (mouseY - baseTransform.y) / baseTransform.k;
         scheduleTransform({ x: mouseX - worldX * newK, y: mouseY - worldY * newK, k: newK });
-    }, [scheduleTransform, containerRef]);
+    }, [scheduleTransform, containerRef, snapZoomScale]);
 
     const handleResetZoom = useCallback(() => {
         const baseTransform = transformLiveRef.current;
@@ -468,13 +474,12 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (e.ctrlKey || e.metaKey) e.preventDefault();
         const zoomIntensity = 0.1;
         const direction = e.deltaY > 0 ? -1 : 1;
-        let newK = baseTransform.k + direction * zoomIntensity;
-        newK = Math.min(Math.max(0.2, newK), 2);
+        const newK = snapZoomScale(baseTransform.k + direction * zoomIntensity);
         const rect = containerRef.current!.getBoundingClientRect();
         const worldX = (e.clientX - rect.left - baseTransform.x) / baseTransform.k;
         const worldY = (e.clientY - rect.top - baseTransform.y) / baseTransform.k;
         scheduleTransform({ x: (e.clientX - rect.left) - worldX * newK, y: (e.clientY - rect.top) - worldY * newK, k: newK });
-    }, [scheduleTransform, containerRef]);
+    }, [scheduleTransform, containerRef, snapZoomScale]);
 
     const handleNavigate = useCallback((x: number, y: number) => {
         const baseTransform = transformLiveRef.current;
@@ -542,8 +547,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
             if (touchStartRef.current.dist > 0) {
                 const scale = dist / touchStartRef.current.dist;
-                let newK = initialTransformRef.current.k * scale;
-                newK = Math.min(Math.max(0.2, newK), 2.5);
+                const newK = snapZoomScale(initialTransformRef.current.k * scale);
                 const rect = containerRef.current!.getBoundingClientRect();
                 const cx = touchStartRef.current.centerX - rect.left;
                 const cy = touchStartRef.current.centerY - rect.top;
@@ -552,7 +556,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 scheduleTransform({ x: cx - worldX * newK, y: cy - worldY * newK, k: newK });
             }
         }
-    }, [dragMode, transform, screenToWorld, scheduleTransform, scheduleNodeDrag, setTempConnection, containerRef, dragStartRef, initialTransformRef, touchStartRef, nodes]);
+    }, [dragMode, transform, screenToWorld, scheduleTransform, scheduleNodeDrag, setTempConnection, containerRef, dragStartRef, initialTransformRef, touchStartRef, nodes, snapZoomScale]);
 
     const handleTouchEnd = useCallback((e: any) => {
         pendingNodeDragRef.current = null;
