@@ -1,38 +1,67 @@
 import { ModelConfig } from "../types";
 import { fetchThirdParty, constructUrl } from "../network";
-import { loadSd2AssetLibrary } from "./sd2Assets";
+import {
+    loadSd2AssetLibrary,
+    uploadImageSourceToImgbb,
+    type Sd2AssetItem
+} from "./sd2Assets";
 
 const SD2_DEFAULT_CREATE_ENDPOINT = "/v2/videos/generations";
 const SD2_DEFAULT_QUERY_ENDPOINT = "/v2/videos/generations/{task_id}";
 
-const convertAssetMentionsToUri = (prompt: string): string => {
-    const library = loadSd2AssetLibrary();
+type MediaReferenceBuckets = {
+    images: string[];
+    videos: string[];
+    audios: string[];
+};
+
+type PromptAssetExtraction = MediaReferenceBuckets & {
+    promptWithAssetIds: string;
+};
+
+const normalizePromptText = (prompt: string): string =>
+    String(prompt || "")
+        .replace(/\u200B/g, "")
+        .replace(/\u00A0/g, " ");
+
+const convertAssetMentionsToUri = (prompt: string, library: Sd2AssetItem[]): string => {
     if (!library.length) return prompt;
 
     const assetMap = new Map<string, string>();
     for (const item of library) {
-        const key = String(item?.assetId || "").trim().toLowerCase();
-        if (!key) continue;
-        if (!assetMap.has(key)) {
-            assetMap.set(key, item.assetId.trim());
+        const assetId = String(item?.assetId || "").trim();
+        if (!assetId) continue;
+
+        const keys = [
+            assetId,
+            String(item?.localFileName || "").trim()
+        ].filter(Boolean);
+
+        for (const key of keys) {
+            const normalized = key.toLowerCase();
+            if (!normalized || assetMap.has(normalized)) continue;
+            assetMap.set(normalized, assetId);
         }
     }
     if (!assetMap.size) return prompt;
 
-    return prompt.replace(/(^|\s)@([^\s@,，。！？!?:;；]+)/g, (full, leadingSpace: string, mention: string) => {
-        const matchedId = assetMap.get(String(mention || "").trim().toLowerCase());
+    return prompt.replace(/(^|\s)@([^\s@,锛屻€傦紒锛??:;锛沒+)/g, (full, leadingSpace: string, mention: string) => {
+        const rawMention = String(mention || "").trim();
+        if (!rawMention) return full;
+        if (/^(image|video|audio)\d*$/i.test(rawMention)) {
+            return full;
+        }
+
+        const matchedId = assetMap.get(rawMention.toLowerCase());
         if (!matchedId) return full;
         return `${leadingSpace}asset://${matchedId}`;
     });
 };
 
-const sanitizePrompt = (prompt: string): string => {
-    const cleaned = String(prompt || "")
+const sanitizeConnectedInputPrompt = (prompt: string): string =>
+    normalizePromptText(prompt)
         .replace(/@(?:Image|Video)(?:\s+)?(\d+)/gi, "Image $1")
         .trim();
-
-    return convertAssetMentionsToUri(cleaned).trim();
-};
 
 const parseDuration = (duration: string): number => {
     const parsed = parseInt(String(duration || "").replace("s", ""), 10);
@@ -54,7 +83,7 @@ const looksLikeAudio = (src: string): boolean => {
 
 const splitMultimodalInputs = (
     inputs: Array<{ src: string; isVideo?: boolean }>
-): { images: string[]; videos: string[]; audios: string[] } => {
+): MediaReferenceBuckets => {
     const images: string[] = [];
     const videos: string[] = [];
     const audios: string[] = [];
@@ -80,6 +109,96 @@ const splitMultimodalInputs = (
     }
 
     return { images, videos, audios };
+};
+
+const resolveLibraryAssetBucket = (asset: Sd2AssetItem): keyof MediaReferenceBuckets => {
+    const type = String(asset.assetType || "").trim().toLowerCase();
+    if (type.includes("video")) return "videos";
+    if (type.includes("audio")) return "audios";
+    if (type.includes("image")) return "images";
+
+    const hints = [asset.sourceUrl, asset.previewUrl, asset.localPreviewUrl];
+    for (const hint of hints) {
+        const value = String(hint || "").trim();
+        if (!value) continue;
+        if (looksLikeVideo(value)) return "videos";
+        if (looksLikeAudio(value)) return "audios";
+    }
+
+    return "images";
+};
+
+const pushUnique = (list: string[], seen: Set<string>, value: string) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    list.push(normalized);
+};
+
+const mergeUnique = (...lists: string[][]): string[] => {
+    const merged: string[] = [];
+    const seen = new Set<string>();
+
+    for (const list of lists) {
+        for (const item of list) {
+            const normalized = String(item || "").trim();
+            if (!normalized || seen.has(normalized)) continue;
+            seen.add(normalized);
+            merged.push(normalized);
+        }
+    }
+
+    return merged;
+};
+
+const extractPromptAssetReferences = (prompt: string): PromptAssetExtraction => {
+    const library = loadSd2AssetLibrary();
+    const libraryById = new Map<string, Sd2AssetItem>();
+
+    for (const item of library) {
+        const assetId = String(item?.assetId || "").trim();
+        if (!assetId || libraryById.has(assetId.toLowerCase())) continue;
+        libraryById.set(assetId.toLowerCase(), item);
+    }
+
+    const promptWithAssetIds = convertAssetMentionsToUri(
+        sanitizeConnectedInputPrompt(prompt),
+        library
+    );
+
+    const promptAssets: MediaReferenceBuckets = {
+        images: [],
+        videos: [],
+        audios: []
+    };
+    const seenAssetUris = new Set<string>();
+
+    promptWithAssetIds.replace(/asset:\/\/([^\s,锛屻€傦紒锛??:;锛沒+)/gi, (_full, rawAssetId: string) => {
+        const assetId = String(rawAssetId || "").trim();
+        if (!assetId) return "";
+
+        const asset = libraryById.get(assetId.toLowerCase());
+        if (!asset) return "";
+
+        const bucket = resolveLibraryAssetBucket(asset);
+        pushUnique(promptAssets[bucket], seenAssetUris, `asset://${assetId}`);
+        return "";
+    });
+
+    return {
+        promptWithAssetIds,
+        ...promptAssets
+    };
+};
+
+const convertConnectedImagesToHostedUrls = async (images: string[]): Promise<string[]> => {
+    const hostedImages: string[] = [];
+
+    for (const image of images) {
+        hostedImages.push(await uploadImageSourceToImgbb(image));
+    }
+
+    return hostedImages;
 };
 
 const extractTaskId = (payload: any): string => {
@@ -167,8 +286,14 @@ export const generateSD2Video = async (
 ): Promise<string> => {
     const createEndpoint = config.endpoint || SD2_DEFAULT_CREATE_ENDPOINT;
     const createUrl = constructUrl(config.baseUrl, createEndpoint);
-    const cleanedPrompt = sanitizePrompt(prompt);
-    const { images, videos, audios } = splitMultimodalInputs(inputAssets || []);
+    const connectedInputs = splitMultimodalInputs(inputAssets || []);
+    const promptAssets = extractPromptAssetReferences(prompt);
+    const hostedImages = await convertConnectedImagesToHostedUrls(connectedInputs.images);
+
+    const cleanedPrompt = promptAssets.promptWithAssetIds;
+    const images = mergeUnique(hostedImages, promptAssets.images);
+    const videos = mergeUnique(connectedInputs.videos, promptAssets.videos);
+    const audios = mergeUnique(connectedInputs.audios, promptAssets.audios);
 
     const payload: Record<string, any> = {
         model: config.modelId,
