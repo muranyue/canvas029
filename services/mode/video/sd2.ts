@@ -45,7 +45,7 @@ const convertAssetMentionsToUri = (prompt: string, library: Sd2AssetItem[]): str
     }
     if (!assetMap.size) return prompt;
 
-    return prompt.replace(/(^|\s)@([^\s@,锛屻€傦紒锛??:;锛沒+)/g, (full, leadingSpace: string, mention: string) => {
+    return prompt.replace(/(^|\s)@([^\s@,，。！？!?:;；]+)/g, (full, leadingSpace: string, mention: string) => {
         const rawMention = String(mention || "").trim();
         if (!rawMention) return full;
         if (/^(image|video|audio)\d*$/i.test(rawMention)) {
@@ -173,12 +173,14 @@ const extractPromptAssetReferences = (prompt: string): PromptAssetExtraction => 
     };
     const seenAssetUris = new Set<string>();
 
-    promptWithAssetIds.replace(/asset:\/\/([^\s,锛屻€傦紒锛??:;锛沒+)/gi, (_full, rawAssetId: string) => {
+    promptWithAssetIds.replace(/asset:\/\/([^\s,，。！？!?:;；]+)/gi, (_full, rawAssetId: string) => {
         const assetId = String(rawAssetId || "").trim();
         if (!assetId) return "";
 
         const asset = libraryById.get(assetId.toLowerCase());
-        if (!asset) return "";
+        if (!asset) {
+            throw new Error(`SD 2.0 asset ${assetId} was not found in the local asset library. Please reselect it from the SD 2.0 asset panel.`);
+        }
 
         const bucket = resolveLibraryAssetBucket(asset);
         pushUnique(promptAssets[bucket], seenAssetUris, `asset://${assetId}`);
