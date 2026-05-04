@@ -152,8 +152,8 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
       type: 'VIDEO_GEN_STD',
       category: 'VIDEO',
       defaultBaseUrl: 'https://ai.t8star.cn',
-      defaultEndpoint: '/v2/videos/generations',
-      defaultQueryEndpoint: '/v2/videos/generations/{task_id}'
+      defaultEndpoint: '/seedance/v3/contents/generations/tasks',
+      defaultQueryEndpoint: '/seedance/v3/contents/generations/tasks/{task_id}'
   },
   'SD 2.0 Pro': {
       id: 'doubao-seedance-2-0-260128',
@@ -161,8 +161,8 @@ export const MODEL_REGISTRY: Record<string, ModelDef> = {
       type: 'VIDEO_GEN_STD',
       category: 'VIDEO',
       defaultBaseUrl: 'https://ai.t8star.cn',
-      defaultEndpoint: '/v2/videos/generations',
-      defaultQueryEndpoint: '/v2/videos/generations/{task_id}'
+      defaultEndpoint: '/seedance/v3/contents/generations/tasks',
+      defaultQueryEndpoint: '/seedance/v3/contents/generations/tasks/{task_id}'
   },
   
   ...customModels

@@ -345,6 +345,8 @@ export const useNodeOperations = ({
                 inputCount: inputSrcs.length,
                 inputKinds: inputs.map(input => (input.isVideo ? 'video' : 'image')),
                 errorMessage,
+                sd2Payload: (e as any)?.sd2Payload,
+                sd2CreateUrl: (e as any)?.sd2CreateUrl,
                 error: normalizeErrorForLocalLog(e),
             });
             alert(`Generation Failed: ${errorMessage}`);

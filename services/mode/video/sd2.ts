@@ -8,6 +8,8 @@ import {
 
 const SD2_DEFAULT_CREATE_ENDPOINT = "/v2/videos/generations";
 const SD2_DEFAULT_QUERY_ENDPOINT = "/v2/videos/generations/{task_id}";
+const SD2_CONTENTS_CREATE_ENDPOINT = "/seedance/v3/contents/generations/tasks";
+const SD2_CONTENTS_QUERY_ENDPOINT = "/seedance/v3/contents/generations/tasks/{task_id}";
 
 type MediaReferenceBuckets = {
     images: string[];
@@ -18,6 +20,17 @@ type MediaReferenceBuckets = {
 type PromptAssetExtraction = MediaReferenceBuckets & {
     promptWithAssetIds: string;
 };
+
+type Sd2GenerationMode = "text_to_video" | "image_to_video" | "start_end" | "reference";
+type Sd2ContentItem =
+    | { type: "text"; text: string }
+    | {
+        type: "image_url";
+        image_url: { url: string };
+        role?: "first_frame" | "last_frame" | "reference_image";
+    }
+    | { type: "video_url"; video_url: { url: string } }
+    | { type: "audio_url"; audio_url: { url: string } };
 
 const normalizePromptText = (prompt: string): string =>
     String(prompt || "")
@@ -151,6 +164,65 @@ const mergeUnique = (...lists: string[][]): string[] => {
     return merged;
 };
 
+const hasPromptAssetReferences = (promptAssets: MediaReferenceBuckets): boolean =>
+    promptAssets.images.length > 0 || promptAssets.videos.length > 0 || promptAssets.audios.length > 0;
+
+const buildSd2MultimodalContent = (
+    mode: Sd2GenerationMode,
+    text: string,
+    images: string[],
+    videos: string[],
+    audios: string[]
+): Sd2ContentItem[] => {
+    const content: Sd2ContentItem[] = [];
+    const normalizedText = normalizePromptText(text).trim();
+
+    if (normalizedText) {
+        content.push({ type: "text", text: normalizedText });
+    }
+
+    images.forEach((url, index) => {
+        if (mode === "start_end") {
+            const role = index === 0 ? "first_frame" : "last_frame";
+            content.push({ type: "image_url", image_url: { url }, role });
+            return;
+        }
+
+        if (mode === "reference") {
+            content.push({ type: "image_url", image_url: { url }, role: "reference_image" });
+            return;
+        }
+
+        content.push({ type: "image_url", image_url: { url } });
+    });
+    videos.forEach((url) => {
+        content.push({ type: "video_url", video_url: { url } });
+    });
+    audios.forEach((url) => {
+        content.push({ type: "audio_url", audio_url: { url } });
+    });
+
+    return content;
+};
+
+const resolveSd2Mode = (
+    inputAssets: Array<{ src: string; isVideo?: boolean }>,
+    isStartEndMode: boolean,
+    isReferenceMode: boolean,
+    promptAssets: MediaReferenceBuckets
+): Sd2GenerationMode => {
+    if (isReferenceMode || hasPromptAssetReferences(promptAssets)) return "reference";
+
+    const connectedInputs = splitMultimodalInputs(inputAssets || []);
+    if (isStartEndMode && connectedInputs.images.length > 0) {
+        return "start_end";
+    }
+    if (connectedInputs.images.length > 0) {
+        return "image_to_video";
+    }
+    return "text_to_video";
+};
+
 const extractPromptAssetReferences = (prompt: string): PromptAssetExtraction => {
     const library = loadSd2AssetLibrary();
     const libraryById = new Map<string, Sd2AssetItem>();
@@ -226,6 +298,7 @@ const extractStatus = (payload: any): string => {
 
 const extractVideoUrl = (payload: any): string => {
     const candidates = [
+        payload?.content?.video_url,
         payload?.data?.output,
         payload?.output,
         payload?.url,
@@ -267,8 +340,26 @@ const extractError = (payload: any): string => {
     return "Unknown error";
 };
 
+const resolveSd2CreateEndpoint = (config: ModelConfig): string => {
+    const endpoint = String(config.endpoint || "").trim();
+    if (!endpoint) return SD2_CONTENTS_CREATE_ENDPOINT;
+    if (endpoint === "/seedance/v3/contents/generations") {
+        return SD2_CONTENTS_CREATE_ENDPOINT;
+    }
+    return endpoint;
+};
+
+const resolveSd2QueryEndpoint = (config: ModelConfig): string => {
+    const endpoint = String(config.queryEndpoint || "").trim();
+    if (!endpoint) return SD2_CONTENTS_QUERY_ENDPOINT;
+    if (endpoint === "/seedance/v3/contents/generations/{task_id}" || endpoint === "/seedance/v3/contents/generations/{id}") {
+        return SD2_CONTENTS_QUERY_ENDPOINT;
+    }
+    return endpoint;
+};
+
 const resolveQueryUrl = (config: ModelConfig, taskId: string): string => {
-    const endpoint = config.queryEndpoint || SD2_DEFAULT_QUERY_ENDPOINT;
+    const endpoint = resolveSd2QueryEndpoint(config) || SD2_DEFAULT_QUERY_ENDPOINT;
     const resolvedEndpoint = endpoint
         .replace("{task_id}", taskId)
         .replace("{id}", taskId);
@@ -284,35 +375,69 @@ export const generateSD2Video = async (
     aspectRatio: string,
     resolution: string,
     duration: string,
-    inputAssets: Array<{ src: string; isVideo?: boolean }>
+    inputAssets: Array<{ src: string; isVideo?: boolean }>,
+    isStartEndMode: boolean = false,
+    isReferenceMode: boolean = false
 ): Promise<string> => {
-    const createEndpoint = config.endpoint || SD2_DEFAULT_CREATE_ENDPOINT;
+    const createEndpoint = resolveSd2CreateEndpoint(config) || SD2_DEFAULT_CREATE_ENDPOINT;
     const createUrl = constructUrl(config.baseUrl, createEndpoint);
     const connectedInputs = splitMultimodalInputs(inputAssets || []);
     const promptAssets = extractPromptAssetReferences(prompt);
+    const mode = resolveSd2Mode(inputAssets, isStartEndMode, isReferenceMode, promptAssets);
     const hostedImages = await convertConnectedImagesToHostedUrls(connectedInputs.images);
+    const payloadPromptBase = sanitizeConnectedInputPrompt(prompt);
 
-    const cleanedPrompt = promptAssets.promptWithAssetIds;
-    const images = mergeUnique(hostedImages, promptAssets.images);
-    const videos = mergeUnique(connectedInputs.videos, promptAssets.videos);
-    const audios = mergeUnique(connectedInputs.audios, promptAssets.audios);
+    let cleanedPrompt = payloadPromptBase;
+    let images: string[] = [];
+    let videos: string[] = [];
+    let audios: string[] = [];
 
+    if (mode === "reference") {
+        cleanedPrompt = promptAssets.promptWithAssetIds;
+        images = mergeUnique(hostedImages, promptAssets.images);
+        videos = mergeUnique(connectedInputs.videos, promptAssets.videos);
+        audios = mergeUnique(connectedInputs.audios, promptAssets.audios);
+    } else if (mode === "start_end") {
+        images = hostedImages.length > 1
+            ? [hostedImages[0], hostedImages[hostedImages.length - 1]]
+            : hostedImages.slice(0, 1);
+    } else if (mode === "image_to_video") {
+        images = hostedImages.slice(0, 1);
+    }
+
+    const content = buildSd2MultimodalContent(mode, cleanedPrompt, images, videos, audios);
+    if (content.length === 0) {
+        throw new Error("SD 2.0 content is empty. Please add a prompt or connect at least one valid reference asset.");
+    }
+
+    const normalizedRatio = aspectRatio || "16:9";
+    const normalizedResolution = resolution || "720p";
+    const normalizedDuration = parseDuration(duration);
+
+    // Match the known-good request shape as closely as possible.
     const payload: Record<string, any> = {
+        content,
+        duration: normalizedDuration,
+        generate_audio: true,
         model: config.modelId,
-        prompt: cleanedPrompt,
-        ratio: aspectRatio || "16:9",
-        resolution: resolution || "720p",
-        duration: parseDuration(duration)
+        ratio: normalizedRatio,
+        resolution: normalizedResolution,
+        watermark: false
     };
-
-    if (images.length > 0) payload.images = images;
-    if (videos.length > 0) payload.videos = videos;
-    if (audios.length > 0) payload.audios = audios;
-
-    const createResponse = await fetchThirdParty(createUrl, "POST", payload, config, {
-        timeout: 180000,
-        retries: 1
-    });
+    console.debug("SD2 request payload", payload);
+    let createResponse: any;
+    try {
+        createResponse = await fetchThirdParty(createUrl, "POST", payload, config, {
+            timeout: 180000,
+            retries: 1
+        });
+    } catch (error: any) {
+        if (error && typeof error === "object") {
+            error.sd2Payload = payload;
+            error.sd2CreateUrl = createUrl;
+        }
+        throw error;
+    }
 
     const directUrl = extractVideoUrl(createResponse);
     if (directUrl) return directUrl;

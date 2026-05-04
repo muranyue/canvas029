@@ -196,7 +196,9 @@ export const SD2Handler = {
             params.aspectRatio,
             params.resolution,
             params.duration,
-            mediaInputs
+            mediaInputs,
+            !!params.isStartEndMode,
+            !!params.isReferenceMode
         );
     }
 };
