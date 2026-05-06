@@ -49,6 +49,7 @@ interface CanvasStateSetters {
     getNodesIntersectingBounds: (left: number, top: number, right: number, bottom: number) => NodeData[];
     screenToWorld: (x: number, y: number) => Point;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
+    markInteractionActivity: () => void;
 }
 
 interface CanvasOperations {
@@ -77,7 +78,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
         setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
         setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor, setDraggingNodeIds,
-        getNodesIntersectingBounds, screenToWorld, updateNodeData,
+        getNodesIntersectingBounds, screenToWorld, updateNodeData, markInteractionActivity,
     } = state;
 
     const {
@@ -470,6 +471,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     }, [scheduleTransform, containerRef]);
 
     const handleWheel = useCallback((e: any) => {
+        markInteractionActivity();
         const baseTransform = transformLiveRef.current;
         if (e.ctrlKey || e.metaKey) e.preventDefault();
         const zoomIntensity = 0.1;
@@ -479,7 +481,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         const worldX = (e.clientX - rect.left - baseTransform.x) / baseTransform.k;
         const worldY = (e.clientY - rect.top - baseTransform.y) / baseTransform.k;
         scheduleTransform({ x: (e.clientX - rect.left) - worldX * newK, y: (e.clientY - rect.top) - worldY * newK, k: newK });
-    }, [scheduleTransform, containerRef, snapZoomScale]);
+    }, [scheduleTransform, containerRef, snapZoomScale, markInteractionActivity]);
 
     const handleNavigate = useCallback((x: number, y: number) => {
         const baseTransform = transformLiveRef.current;
@@ -494,6 +496,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     // ========== Touch Events ==========
     const handleTouchStart = useCallback((e: any) => {
+        markInteractionActivity();
         const target = e.target as HTMLElement;
         if (target.closest('button, input, textarea, [contenteditable="true"], [data-interactive="true"], .node-content')) return;
 
@@ -512,9 +515,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             initialTransformRef.current = { ...transform };
             setDragMode('NONE');
         }
-    }, [transform, setDragMode, dragStartRef, initialTransformRef, touchStartRef]);
+    }, [transform, setDragMode, dragStartRef, initialTransformRef, touchStartRef, markInteractionActivity]);
 
     const handleTouchMove = useCallback((e: any) => {
+        markInteractionActivity();
         if (e.touches.length === 1) {
             if (pendingNodeDragRef.current && dragMode === 'NONE') {
                 const touch = e.touches[0];
@@ -556,9 +560,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 scheduleTransform({ x: cx - worldX * newK, y: cy - worldY * newK, k: newK });
             }
         }
-    }, [dragMode, transform, screenToWorld, scheduleTransform, scheduleNodeDrag, setTempConnection, containerRef, dragStartRef, initialTransformRef, touchStartRef, nodes, snapZoomScale]);
+    }, [dragMode, transform, screenToWorld, scheduleTransform, scheduleNodeDrag, setTempConnection, containerRef, dragStartRef, initialTransformRef, touchStartRef, nodes, snapZoomScale, markInteractionActivity]);
 
     const handleTouchEnd = useCallback((e: any) => {
+        markInteractionActivity();
         pendingNodeDragRef.current = null;
         if (dragMode === 'CONNECT') {
             const touch = e.changedTouches[0];
@@ -591,10 +596,11 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         commitSingleNodeGroupJoin();
         draggingNodesRef.current.clear();
         setDraggingNodeIds(new Set());
-    }, [dragMode, nodes, screenToWorld, createConnection, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, touchStartRef, draggingNodesRef, setDraggingNodeIds]);
+    }, [dragMode, nodes, screenToWorld, createConnection, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, touchStartRef, draggingNodesRef, setDraggingNodeIds, markInteractionActivity]);
 
     // ========== Mouse Events ==========
     const handleMouseDown = useCallback((e: any) => {
+        markInteractionActivity();
         if (contextMenu) setContextMenu(null);
         if (quickAddMenu) setQuickAddMenu(null);
         if (selectedConnectionId) setSelectedConnectionId(null);
@@ -619,9 +625,12 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             setSelectionBox({ x: 0, y: 0, w: 0, h: 0 });
             if (!e.shiftKey) setSelectedNodeIds(new Set());
         }
-    }, [contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, desktopPlatform, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef]);
+    }, [contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, desktopPlatform, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef, markInteractionActivity]);
 
     const handleMouseMove = useCallback((e: any) => {
+        if (dragMode !== 'NONE' || pendingNodeDragRef.current) {
+            markInteractionActivity();
+        }
         lastMousePosRef.current = { x: e.clientX, y: e.clientY };
         const worldPos = screenToWorld(e.clientX, e.clientY);
         if (dragMode !== 'NONE' && e.buttons === 0) {
@@ -701,9 +710,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                 }
             }
         }
-    }, [dragMode, transform, nodes, screenToWorld, setDragMode, scheduleTransform, scheduleNodeDrag, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, commitSingleNodeGroupJoin, cancelScheduledNodeDrag, containerRef, dragStartRef, initialTransformRef, connectionStartRef, lastMousePosRef, draggingNodesRef, setDraggingNodeIds]);
+    }, [dragMode, transform, nodes, screenToWorld, setDragMode, scheduleTransform, scheduleNodeDrag, setNodes, setSelectionBox, setSelectedNodeIds, setTempConnection, setSuggestedNodes, flushNodeDragNow, commitDraggedNodeReorder, commitSingleNodeGroupJoin, cancelScheduledNodeDrag, containerRef, dragStartRef, initialTransformRef, connectionStartRef, lastMousePosRef, draggingNodesRef, setDraggingNodeIds, markInteractionActivity]);
 
     const handleMouseUp = useCallback((e: any) => {
+        markInteractionActivity();
         pendingNodeDragRef.current = null;
         if (dragMode === 'CONNECT' && connectionStartRef.current?.type === 'source') {
             setQuickAddMenu({ sourceId: connectionStartRef.current.nodeId, x: e.clientX, y: e.clientY, worldX: screenToWorld(e.clientX, e.clientY).x, worldY: screenToWorld(e.clientX, e.clientY).y });
@@ -716,7 +726,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             setSuggestedNodes([]); setSelectionBox(null); commitSingleNodeGroupJoin(); draggingNodesRef.current.clear();
             setDraggingNodeIds(new Set());
         }
-    }, [dragMode, screenToWorld, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, draggingNodesRef, setDraggingNodeIds]);
+    }, [dragMode, screenToWorld, setQuickAddMenu, setDragMode, setTempConnection, setSuggestedNodes, setSelectionBox, flushNodeDragNow, commitDraggedNodeReorder, cancelScheduledNodeDrag, commitSingleNodeGroupJoin, connectionStartRef, draggingNodesRef, setDraggingNodeIds, markInteractionActivity]);
 
     // ========== Node Events ==========
     const isExcludedTarget = (target: HTMLElement) => {
@@ -837,6 +847,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
     };
 
     const handleNodeMouseDown = useCallback((e: any, id: string) => {
+        markInteractionActivity();
         const target = e.target as HTMLElement;
         if (isExcludedTarget(target)) return;
         if (!target.closest('[data-drag-handle="true"]')) return;
@@ -846,9 +857,10 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             const selection = updateSelectionForPointerDown(id, e.shiftKey);
             pendingNodeDragRef.current = { id, clientX: e.clientX, clientY: e.clientY, selection };
         }
-    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, getNodesIntersectingBounds, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
+    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, getNodesIntersectingBounds, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
 
     const handleNodeTouchStart = useCallback((e: any, id: string) => {
+        markInteractionActivity();
         const target = e.target as HTMLElement;
         if (isExcludedTarget(target)) return;
         if (!target.closest('[data-drag-handle="true"]')) return;
@@ -859,7 +871,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             const selection = updateSelectionForPointerDown(id, false);
             pendingNodeDragRef.current = { id, clientX: touch.clientX, clientY: touch.clientY, selection };
         }
-    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef]);
+    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
 
     const handleNodeTouchEnd = useCallback((e: any, id: string) => {
         if (dragMode === 'NONE') {

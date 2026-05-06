@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { NodeData } from '../../types';
 import { Icons } from '../Icons';
 import { getModelConfig, MODEL_REGISTRY } from '../../services/geminiService';
@@ -111,6 +112,7 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
     const isFocusingRef = useRef(false);
     const [showPlaceholder, setShowPlaceholder] = useState(true);
     const [draftValue, setDraftValue] = useState(() => normalizePromptInput(value));
+    const [hoverPreview, setHoverPreview] = useState<{ url: string; x: number; y: number } | null>(null);
     const draftValueRef = useRef(draftValue);
 
     const escapeHtml = useCallback((str: string) =>
@@ -145,11 +147,13 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
         const lookupKey = assetId.toLowerCase();
         const asset = assetLookup.get(lookupKey);
         const previewUrl = asset ? getSdAssetPreviewUrl(asset) : '';
+        const safeAssetId = escapeHtml(assetId);
+        const safePreviewUrl = previewUrl ? escapeHtml(previewUrl) : '';
         const thumbHtml = previewUrl
-            ? `<img src="${escapeHtml(previewUrl)}" alt="" draggable="false" class="w-full h-full object-cover" />`
+            ? `<img src="${safePreviewUrl}" alt="" draggable="false" class="w-full h-full object-cover" />`
             : '<span class="text-[8px] font-bold text-zinc-400">ASSET</span>';
 
-        return `<span class="inline-flex items-center h-6 px-1.5 mx-0.5 my-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 align-middle select-none chip" contenteditable="false" data-value="${safeToken}"><span class="w-4 h-4 rounded overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700 flex items-center justify-center">${thumbHtml}</span></span>\u200B`;
+        return `<span class="inline-flex items-center h-6 px-1.5 mx-0.5 my-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 align-middle select-none chip cursor-zoom-in" contenteditable="false" data-value="${safeToken}" data-asset-id="${safeAssetId}" data-preview-url="${safePreviewUrl}"><span class="w-4 h-4 rounded overflow-hidden shrink-0 bg-zinc-800 border border-zinc-700 flex items-center justify-center">${thumbHtml}</span></span>\u200B`;
     }, [assetLookup, escapeHtml]);
 
     const createChipHtml = useCallback((text: string) => {
@@ -431,12 +435,63 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
             divRef.current?.focus();
             return;
         }
+        setHoverPreview(null);
         const normalizedValue = normalizePromptInput(divRef.current ? getPlainText(divRef.current) : draftValueRef.current);
         setDraftValue(normalizedValue);
         draftValueRef.current = normalizedValue;
         syncDomToValue(normalizedValue, false);
         onBlur?.(normalizedValue);
     };
+
+    const updateHoverPreview = useCallback((target: EventTarget | null, clientX: number, clientY: number) => {
+        const element = target instanceof HTMLElement ? target.closest('.chip[data-asset-id]') as HTMLElement | null : null;
+        if (!element) {
+            setHoverPreview(null);
+            return;
+        }
+
+        const previewUrl = String(element.dataset.previewUrl || '').trim();
+        if (!previewUrl) {
+            setHoverPreview(null);
+            return;
+        }
+
+        const offset = 18;
+        const maxBox = 272;
+        const nextX = clientX + offset + maxBox > window.innerWidth
+            ? Math.max(8, clientX - maxBox)
+            : clientX + offset;
+        const nextY = clientY + offset + maxBox > window.innerHeight
+            ? Math.max(8, clientY - maxBox)
+            : clientY + offset;
+
+        setHoverPreview((prev) => (
+            prev && prev.url === previewUrl && prev.x === nextX && prev.y === nextY
+                ? prev
+                : { url: previewUrl, x: nextX, y: nextY }
+        ));
+    }, []);
+
+    useEffect(() => {
+        const div = divRef.current;
+        if (!div) return;
+
+        const handleMouseMove = (event: MouseEvent) => {
+            updateHoverPreview(event.target, event.clientX, event.clientY);
+        };
+
+        const handleMouseLeave = () => {
+            setHoverPreview(null);
+        };
+
+        div.addEventListener('mousemove', handleMouseMove);
+        div.addEventListener('mouseleave', handleMouseLeave);
+
+        return () => {
+            div.removeEventListener('mousemove', handleMouseMove);
+            div.removeEventListener('mouseleave', handleMouseLeave);
+        };
+    }, [updateHoverPreview]);
 
     const containerBg = isDark ? 'bg-zinc-900/50' : 'bg-gray-50';
     const borderColor = isDark ? 'border-zinc-700 focus:border-zinc-600' : 'border-gray-200 focus:border-gray-300';
@@ -476,6 +531,22 @@ const ContentEditablePromptInput = React.forwardRef<PromptInputHandle, {
                 spellCheck={false}
                 style={{ whiteSpace: 'pre-wrap', minHeight: '80px', cursor: 'text', WebkitUserSelect: 'text', userSelect: 'text' }}
             />
+            {hoverPreview && typeof document !== 'undefined' && createPortal(
+                <div
+                    className="fixed z-[140] pointer-events-none"
+                    style={{ left: hoverPreview.x, top: hoverPreview.y }}
+                >
+                    <div className={`rounded-xl overflow-hidden border shadow-2xl backdrop-blur-sm ${isDark ? 'bg-zinc-950/95 border-zinc-700' : 'bg-white/95 border-gray-200'}`}>
+                        <img
+                            src={hoverPreview.url}
+                            alt="Asset preview"
+                            className="block max-w-64 max-h-64 w-auto h-auto object-contain"
+                            draggable={false}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
             {showPlaceholder && (
                 <div className={`absolute top-3 left-3 pointer-events-none text-xs font-sans leading-7 ${isDark ? 'text-zinc-500' : 'text-gray-400'} z-0`}>
                     {placeholder}

@@ -360,6 +360,22 @@ export const useCanvasState = () => {
     const isDark = canvasBg === '#0B0C0E';
     const nodeSpatialIndexCacheRef = useRef<NodeSpatialIndexData | null>(null);
     const connectionSpatialIndexCacheRef = useRef<ConnectionSpatialIndexData | null>(null);
+    const heavyPersistTimeoutRef = useRef<number | null>(null);
+    const heavyPersistIdleHandleRef = useRef<number | null>(null);
+    const pendingHeavyPersistRef = useRef(false);
+    const latestCanvasSnapshotRef = useRef<{
+        nodes: NodeData[];
+        connections: Connection[];
+        transform: CanvasTransform;
+        canvasBg: string;
+        deletedNodes: NodeData[];
+    }>({
+        nodes,
+        connections,
+        transform,
+        canvasBg,
+        deletedNodes,
+    });
     const lastHeavyPersistRef = useRef<{
         nodes: NodeData[];
         connections: Connection[];
@@ -372,6 +388,14 @@ export const useCanvasState = () => {
         deletedNodes,
     });
     const lastInteractionAtRef = useRef(0);
+
+    latestCanvasSnapshotRef.current = {
+        nodes,
+        connections,
+        transform,
+        canvasBg,
+        deletedNodes,
+    };
 
     useEffect(() => {
         let isCancelled = false;
@@ -475,13 +499,104 @@ export const useCanvasState = () => {
         }
     }, [transform]);
 
+    const clearScheduledHeavyPersist = useCallback(() => {
+        if (heavyPersistTimeoutRef.current !== null) {
+            window.clearTimeout(heavyPersistTimeoutRef.current);
+            heavyPersistTimeoutRef.current = null;
+        }
+
+        if (heavyPersistIdleHandleRef.current !== null) {
+            const cancelIdle = (window as any).cancelIdleCallback as
+                ((id: number) => void) | undefined;
+            if (cancelIdle) {
+                cancelIdle(heavyPersistIdleHandleRef.current);
+            }
+            heavyPersistIdleHandleRef.current = null;
+        }
+    }, []);
+
+    const getHeavyPersistDelay = useCallback((nextNodes: NodeData[]) => {
+        const isGenerating = nextNodes.some(n => n.isLoading);
+        const hasInlineMedia = nextNodes.some((node) => {
+            if (isInlineMediaUrl(node.imageSrc) || isInlineMediaUrl(node.originalImageSrc) || isInlineMediaUrl(node.videoSrc)) {
+                return true;
+            }
+            if (node.outputArtifacts && node.outputArtifacts.some((url) => isInlineMediaUrl(url))) {
+                return true;
+            }
+            if (node.outputOriginalArtifacts && node.outputOriginalArtifacts.some((url) => isInlineMediaUrl(url))) {
+                return true;
+            }
+            return false;
+        });
+        const baseDelay = hasInlineMedia ? 240 : (isGenerating ? 1200 : 500);
+        const timeSinceInteraction = Date.now() - lastInteractionAtRef.current;
+        return timeSinceInteraction < 900
+            ? Math.max(baseDelay, 900)
+            : baseDelay;
+    }, []);
+
+    const scheduleHeavyPersist = useCallback((state?: {
+        nodes?: NodeData[];
+        connections?: Connection[];
+        transform?: CanvasTransform;
+        canvasBg?: string;
+        deletedNodes?: NodeData[];
+    }) => {
+        if (!isStorageHydratedRef.current) return;
+        if (dragModeRef.current !== 'NONE') return;
+
+        const snapshot = {
+            nodes: state?.nodes ?? latestCanvasSnapshotRef.current.nodes,
+            connections: state?.connections ?? latestCanvasSnapshotRef.current.connections,
+            transform: state?.transform ?? latestCanvasSnapshotRef.current.transform,
+            canvasBg: state?.canvasBg ?? latestCanvasSnapshotRef.current.canvasBg,
+            deletedNodes: state?.deletedNodes ?? latestCanvasSnapshotRef.current.deletedNodes,
+        };
+
+        pendingHeavyPersistRef.current = true;
+        clearScheduledHeavyPersist();
+
+        const delay = getHeavyPersistDelay(snapshot.nodes);
+        heavyPersistTimeoutRef.current = window.setTimeout(() => {
+            heavyPersistTimeoutRef.current = null;
+            const requestIdle = (window as any).requestIdleCallback as
+                ((cb: () => void, opts?: { timeout?: number }) => number) | undefined;
+
+            const runPersist = () => {
+                heavyPersistIdleHandleRef.current = null;
+                pendingHeavyPersistRef.current = false;
+                persistCanvasState(snapshot);
+            };
+
+            if (requestIdle) {
+                heavyPersistIdleHandleRef.current = requestIdle(runPersist, { timeout: 1600 });
+            } else {
+                runPersist();
+            }
+        }, delay);
+    }, [clearScheduledHeavyPersist, getHeavyPersistDelay, persistCanvasState]);
+
+    const markInteractionActivity = useCallback(() => {
+        lastInteractionAtRef.current = Date.now();
+        if (!pendingHeavyPersistRef.current) return;
+
+        clearScheduledHeavyPersist();
+        if (dragModeRef.current === 'NONE') {
+            scheduleHeavyPersist();
+        }
+    }, [clearScheduledHeavyPersist, scheduleHeavyPersist]);
+
     // Sync dragModeRef
     useEffect(() => {
         dragModeRef.current = dragMode;
         if (dragMode !== 'NONE') {
             lastInteractionAtRef.current = Date.now();
+            clearScheduledHeavyPersist();
+        } else if (pendingHeavyPersistRef.current) {
+            scheduleHeavyPersist();
         }
-    }, [dragMode]);
+    }, [clearScheduledHeavyPersist, dragMode, scheduleHeavyPersist]);
 
     // Heavy persistence effect (nodes/connections/media/config)
     useEffect(() => {
@@ -496,50 +611,13 @@ export const useCanvasState = () => {
 
         if (!hasHeavyChanges) return;
 
-        const isGenerating = nodes.some(n => n.isLoading);
-        const hasInlineMedia = nodes.some((node) => {
-            if (isInlineMediaUrl(node.imageSrc) || isInlineMediaUrl(node.originalImageSrc) || isInlineMediaUrl(node.videoSrc)) {
-                return true;
-            }
-            if (node.outputArtifacts && node.outputArtifacts.some((url) => isInlineMediaUrl(url))) {
-                return true;
-            }
-            if (node.outputOriginalArtifacts && node.outputOriginalArtifacts.some((url) => isInlineMediaUrl(url))) {
-                return true;
-            }
-            return false;
-        });
-        const baseDelay = hasInlineMedia ? 240 : (isGenerating ? 1200 : 500);
-        const timeSinceInteraction = Date.now() - lastInteractionAtRef.current;
-        const interactionAwareDelay = timeSinceInteraction < 900
-            ? Math.max(baseDelay, 900)
-            : baseDelay;
-
         lastHeavyPersistRef.current = { nodes, connections, canvasBg, deletedNodes };
-
-        let idleHandle: number | null = null;
-        const requestIdle = (window as any).requestIdleCallback as
-            ((cb: () => void, opts?: { timeout?: number }) => number) | undefined;
-        const cancelIdle = (window as any).cancelIdleCallback as
-            ((id: number) => void) | undefined;
-
-        const handler = window.setTimeout(() => {
-            if (requestIdle) {
-                idleHandle = requestIdle(() => {
-                    persistCanvasState();
-                }, { timeout: 1600 });
-            } else {
-                persistCanvasState();
-            }
-        }, interactionAwareDelay);
+        scheduleHeavyPersist({ nodes, connections, transform, canvasBg, deletedNodes });
 
         return () => {
-            window.clearTimeout(handler);
-            if (idleHandle !== null && cancelIdle) {
-                cancelIdle(idleHandle);
-            }
+            clearScheduledHeavyPersist();
         };
-    }, [nodes, connections, canvasBg, deletedNodes, isStorageHydrated, persistCanvasState, dragMode]);
+    }, [nodes, connections, transform, canvasBg, deletedNodes, isStorageHydrated, dragMode, clearScheduledHeavyPersist, scheduleHeavyPersist]);
 
     // Lightweight transform persistence effect (pan/zoom only)
     useEffect(() => {
@@ -608,6 +686,7 @@ export const useCanvasState = () => {
     // Update node data
     const updateNodeData = useCallback((id: string, updates: Partial<NodeData>) => {
         if (!updates || Object.keys(updates).length === 0) return;
+        markInteractionActivity();
         setNodes(prev => {
             let changed = false;
             const next = prev.map(n => {
@@ -627,7 +706,7 @@ export const useCanvasState = () => {
             });
             return changed ? next : prev;
         });
-    }, []);
+    }, [markInteractionActivity]);
 
     const nodeById = useMemo(() => {
         const map = new Map<string, NodeData>();
@@ -1022,5 +1101,6 @@ export const useCanvasState = () => {
         // Utils
         screenToWorld,
         updateNodeData,
+        markInteractionActivity,
     };
 };

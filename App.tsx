@@ -66,7 +66,7 @@ const CanvasWithSidebar: React.FC = () => {
         showColorPicker, setShowColorPicker, nextGroupColor, setNextGroupColor,
         desktopPlatform, setDesktopPlatform,
         tempConnection, setTempConnection, suggestedNodes, setSuggestedNodes,
-        isDark, screenToWorld, updateNodeData,
+        isDark, screenToWorld, updateNodeData, markInteractionActivity,
     } = canvasState;
 
     // ========== Hooks ==========
@@ -132,7 +132,7 @@ const CanvasWithSidebar: React.FC = () => {
             setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
             setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor,
             setDraggingNodeIds,
-            getNodesIntersectingBounds, screenToWorld, updateNodeData,
+            getNodesIntersectingBounds, screenToWorld, updateNodeData, markInteractionActivity,
         },
         ops: {
             addNode, generateId, createConnection,
