@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
-import { CanvasTransform, Point } from './types';
+import { CanvasTransform, Point, NodeData } from './types';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { SettingsModal } from './components/Settings/SettingsModal';
 import { ContextMenu } from './components/ContextMenu';
@@ -50,6 +50,7 @@ const CanvasWithSidebar: React.FC = () => {
     const [isSd2AssetLibraryOpen, setIsSd2AssetLibraryOpen] = useState(false);
     const [renderModeOverride, setRenderModeOverride] = useState<'AUTO' | 'FULL' | 'CULL'>('AUTO');
     const [draggingNodeIds, setDraggingNodeIds] = useState<Set<string>>(new Set());
+    const [bulkConnectSourceIds, setBulkConnectSourceIds] = useState<Set<string> | null>(null);
 
     // ========== Canvas State ==========
     const canvasState = useCanvasState();
@@ -68,16 +69,17 @@ const CanvasWithSidebar: React.FC = () => {
         tempConnection, setTempConnection, suggestedNodes, setSuggestedNodes,
         isDark, screenToWorld, updateNodeData, markInteractionActivity,
     } = canvasState;
+    const sidebarNodesRef = useRef<NodeData[]>([]);
 
     // ========== Hooks ==========
     const connectionManager = useConnectionManager({
         nodes, connections, setConnections, setDragMode, setTempConnection, setSuggestedNodes, setSelectedConnectionId,
     });
-    const { getInputImages, createConnection, removeConnection } = connectionManager;
+    const { getInputImages, createConnection, createConnections, removeConnection } = connectionManager;
 
     const nodeOps = useNodeOperations({
         nodes, setNodes, connections, setConnections, deletedNodes, setDeletedNodes,
-        selectedNodeIds, setSelectedNodeIds, updateNodeData, screenToWorld, getInputImages, containerRef,
+        selectedNodeIds, setSelectedNodeIds, updateNodeData, markInteractionActivity, screenToWorld, getInputImages, containerRef,
     });
     const { addNode, deleteNode, handleGenerate, handleMaximize, handleDownload, handleUploadToAssetLibrary, handleAlign, handleToolbarAction, generateId } = nodeOps;
 
@@ -99,6 +101,7 @@ const CanvasWithSidebar: React.FC = () => {
         contextMenu, setContextMenu, quickAddMenu, setQuickAddMenu,
         showNewWorkflowDialog, setShowNewWorkflowDialog, isSettingsOpen, setIsSettingsOpen,
         showColorPicker, setShowColorPicker, performCopy, handleAlign, handleGroupSelection,
+        bulkConnectSourceIds, setBulkConnectSourceIds,
     });
 
     const triggerReplaceImage = (nodeId: string) => {
@@ -106,7 +109,23 @@ const CanvasWithSidebar: React.FC = () => {
         replaceImageRef.current?.click();
     };
 
-    const sidebarNodes = useMemo(() => [...nodes, ...deletedNodes], [nodes, deletedNodes]);
+    const sidebarNodes = useMemo(() => {
+        const nextNodes = [...nodes, ...deletedNodes].filter((node) => (
+            !!node.imageSrc ||
+            !!node.originalImageSrc ||
+            !!node.videoSrc ||
+            !!(node.outputArtifacts && node.outputArtifacts.length > 0) ||
+            !!(node.outputOriginalArtifacts && node.outputOriginalArtifacts.length > 0)
+        ));
+
+        const prevNodes = sidebarNodesRef.current;
+        if (prevNodes.length === nextNodes.length && prevNodes.every((node, index) => node === nextNodes[index])) {
+            return prevNodes;
+        }
+
+        sidebarNodesRef.current = nextNodes;
+        return nextNodes;
+    }, [nodes, deletedNodes]);
 
     const handleSidebarLoadWorkflow = useCallback(() => workflowInputRef.current?.click(), []);
     const handleSidebarNewWorkflow = useCallback(() => setShowNewWorkflowDialog(true), []);
@@ -132,10 +151,11 @@ const CanvasWithSidebar: React.FC = () => {
             setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
             setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor,
             setDraggingNodeIds,
+            bulkConnectSourceIds, setBulkConnectSourceIds,
             getNodesIntersectingBounds, screenToWorld, updateNodeData, markInteractionActivity,
         },
         ops: {
-            addNode, generateId, createConnection,
+            addNode, generateId, createConnection, createConnections,
         },
     });
 
@@ -242,6 +262,7 @@ const CanvasWithSidebar: React.FC = () => {
                 selectedConnectionId={selectedConnectionId}
                 selectionBox={selectionBox}
                 dragMode={dragMode}
+                bulkConnectSourceIds={bulkConnectSourceIds}
                 draggingNodeIds={draggingNodeIds}
                 tempConnection={tempConnection}
                 suggestedNodes={suggestedNodes}
@@ -265,6 +286,7 @@ const CanvasWithSidebar: React.FC = () => {
                 handleGroupSelection={handleGroupSelection}
                 handleUngroup={handleUngroup}
                 handleGroupColorChange={handleGroupColorChange}
+                setBulkConnectSourceIds={setBulkConnectSourceIds}
                 getSelectionCenter={getSelectionCenter}
                 handleMouseDown={handlers.handleMouseDown}
                 handleMouseMove={handlers.handleMouseMove}

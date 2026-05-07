@@ -6,6 +6,7 @@ import { Icons } from '../Icons';
 interface BaseNodeProps {
   data: NodeData;
   selected: boolean;
+  bulkConnectTarget?: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
   onClick?: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -22,7 +23,7 @@ interface BaseNodeProps {
 }
 
 const BaseNode: React.FC<BaseNodeProps> = ({ 
-  data, selected, onMouseDown, onClick, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, 
+  data, selected, bulkConnectTarget = false, onMouseDown, onClick, onContextMenu, onConnectStart, onPortMouseUp, children, onResizeStart, 
   onTouchStart, onTouchEnd, onConnectTouchStart, isDark = true
 }) => {
   
@@ -142,9 +143,19 @@ const BaseNode: React.FC<BaseNodeProps> = ({
           <div className={`absolute inset-0 pointer-events-none rounded-xl border-2 border-cyan-500/50 z-40 ${data.isStackOpen ? 'opacity-0' : 'opacity-100'}`}></div> 
       )}
 
+      {bulkConnectTarget && !selected && !isGroup && (
+          <div
+              className={`absolute -inset-1 pointer-events-none rounded-2xl border z-30 ${
+                  isDark
+                      ? 'border-cyan-400/90 shadow-[0_0_0_2px_rgba(34,211,238,0.22)]'
+                      : 'border-cyan-500/80 shadow-[0_0_0_2px_rgba(6,182,212,0.18)]'
+              }`}
+          ></div>
+      )}
+
       {/* Main Content Area - This is the drag handle */}
       <div 
-        className="relative w-full h-full pointer-events-auto"
+        className={`relative w-full h-full pointer-events-auto ${bulkConnectTarget ? 'cursor-copy' : ''}`}
         data-drag-handle="true"
         onMouseDown={onMouseDown}
         onTouchStart={handleTouchStartFiltered}

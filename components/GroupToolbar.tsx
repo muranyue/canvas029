@@ -8,15 +8,19 @@ interface GroupToolbarProps {
     currentColor: string;
     showColorPicker: boolean;
     singleGroupSelected: boolean;
+    canBulkConnect?: boolean;
+    isBulkConnectMode?: boolean;
     onToggleColorPicker: () => void;
     onColorChange: (color: string) => void;
     onGroup: () => void;
     onUngroup: () => void;
+    onBulkConnect?: () => void;
 }
 
 export const GroupToolbar: React.FC<GroupToolbarProps> = ({
     position, isDark, currentColor, showColorPicker, singleGroupSelected,
-    onToggleColorPicker, onColorChange, onGroup, onUngroup,
+    canBulkConnect = false, isBulkConnectMode = false,
+    onToggleColorPicker, onColorChange, onGroup, onUngroup, onBulkConnect,
 }) => {
     return (
         <div className="absolute z-[150] flex flex-col items-center pointer-events-none" style={{ left: position.x, top: position.y - 60, transform: 'translateX(-50%)' }}>
@@ -48,6 +52,20 @@ export const GroupToolbar: React.FC<GroupToolbarProps> = ({
                         </div>
                     )}
                 </div>
+
+                {canBulkConnect && onBulkConnect && (
+                    <button
+                        onClick={onBulkConnect}
+                        className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 mr-1.5 ${
+                            isBulkConnectMode
+                                ? (isDark ? 'bg-cyan-500 text-white' : 'bg-cyan-500 text-white')
+                                : (isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700')
+                        }`}
+                        title={isBulkConnectMode ? 'Select a target node to connect' : 'Connect selected nodes to another node'}
+                    >
+                        <Icons.Link size={14} /> {isBulkConnectMode ? 'Pick Target' : 'Connect'}
+                    </button>
+                )}
 
                 {singleGroupSelected ? (
                     <button onClick={onUngroup} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>

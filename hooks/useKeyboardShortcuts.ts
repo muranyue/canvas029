@@ -29,6 +29,8 @@ interface UseKeyboardShortcutsProps {
     performCopy: () => void;
     handleAlign: (direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => void;
     handleGroupSelection: () => void;
+    bulkConnectSourceIds: Set<string> | null;
+    setBulkConnectSourceIds: React.Dispatch<React.SetStateAction<Set<string> | null>>;
 }
 
 export const useKeyboardShortcuts = ({
@@ -59,6 +61,8 @@ export const useKeyboardShortcuts = ({
     performCopy,
     handleAlign,
     handleGroupSelection,
+    bulkConnectSourceIds,
+    setBulkConnectSourceIds,
 }: UseKeyboardShortcutsProps) => {
     const spacePressed = useRef(false);
     const spaceKeyDownAtRef = useRef(0);
@@ -137,6 +141,7 @@ export const useKeyboardShortcuts = ({
                 if (quickAddMenu) setQuickAddMenu(null);
                 if (showNewWorkflowDialog) setShowNewWorkflowDialog(false);
                 if (isSettingsOpen) setIsSettingsOpen(false);
+                if (bulkConnectSourceIds) setBulkConnectSourceIds(null);
                 setShowColorPicker(false);
             }
 
@@ -196,7 +201,8 @@ export const useKeyboardShortcuts = ({
         viewportSize, setTransform,
         setNodes, setConnections, setSelectedNodeIds, setSelectedConnectionId,
         setDeletedNodes, setPreviewMedia, setContextMenu, setQuickAddMenu,
-        setShowNewWorkflowDialog, setIsSettingsOpen, setShowColorPicker
+        setShowNewWorkflowDialog, setIsSettingsOpen, setShowColorPicker,
+        bulkConnectSourceIds, setBulkConnectSourceIds
     ]);
 
     return { spacePressed };

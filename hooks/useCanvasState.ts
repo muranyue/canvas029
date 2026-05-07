@@ -66,6 +66,14 @@ const matchesNodeBounds = (bounds: SpatialBounds | undefined, node: NodeData) =>
     bounds.right === node.x + node.width &&
     bounds.bottom === node.y + node.height;
 
+const cloneCellMap = (cellMap: Map<string, string[]>) => {
+    const next = new Map<string, string[]>();
+    for (const [key, value] of cellMap) {
+        next.set(key, [...value]);
+    }
+    return next;
+};
+
 const matchesConnectionBounds = (bounds: SpatialBounds | undefined, source: NodeData, target: NodeData) => {
     if (!bounds) return false;
 
@@ -732,6 +740,73 @@ export const useCanvasState = () => {
 
     const nodeSpatialIndex = useMemo(() => {
         const prevIndex = nodeSpatialIndexCacheRef.current;
+        if (prevIndex && nodes.length === prevIndex.geometryById.size + 1) {
+            let appendedNode: NodeData | null = null;
+            let canAppendIncrementally = true;
+
+            for (const node of nodes) {
+                const prevBounds = prevIndex.geometryById.get(node.id);
+                if (!prevBounds) {
+                    if (appendedNode) {
+                        canAppendIncrementally = false;
+                        break;
+                    }
+                    appendedNode = node;
+                    continue;
+                }
+
+                if (!matchesNodeBounds(prevBounds, node)) {
+                    canAppendIncrementally = false;
+                    break;
+                }
+            }
+
+            if (canAppendIncrementally && appendedNode) {
+                const left = appendedNode.x;
+                const top = appendedNode.y;
+                const right = appendedNode.x + appendedNode.width;
+                const bottom = appendedNode.y + appendedNode.height;
+                const nextCellMap = cloneCellMap(prevIndex.cellMap);
+                const nextBoundsById = new Map(prevIndex.boundsById);
+                const nextGeometryById = new Map(prevIndex.geometryById);
+                const nextOverflowIds = [...prevIndex.overflowIds];
+
+                nextBoundsById.set(appendedNode.id, { left, top, right, bottom, node: appendedNode });
+                nextGeometryById.set(appendedNode.id, { left, top, right, bottom });
+
+                const minCellX = Math.floor(left / SPATIAL_HASH_CELL_SIZE);
+                const maxCellX = Math.floor(right / SPATIAL_HASH_CELL_SIZE);
+                const minCellY = Math.floor(top / SPATIAL_HASH_CELL_SIZE);
+                const maxCellY = Math.floor(bottom / SPATIAL_HASH_CELL_SIZE);
+                const cells = (maxCellX - minCellX + 1) * (maxCellY - minCellY + 1);
+
+                if (cells > MAX_INDEXED_CELLS_PER_NODE) {
+                    nextOverflowIds.push(appendedNode.id);
+                } else {
+                    for (let cx = minCellX; cx <= maxCellX; cx++) {
+                        for (let cy = minCellY; cy <= maxCellY; cy++) {
+                            const key = toCellKey(cx, cy);
+                            const list = nextCellMap.get(key);
+                            if (list) {
+                                list.push(appendedNode.id);
+                            } else {
+                                nextCellMap.set(key, [appendedNode.id]);
+                            }
+                        }
+                    }
+                }
+
+                const appendedIndex: NodeSpatialIndexData = {
+                    cellMap: nextCellMap,
+                    boundsById: nextBoundsById,
+                    overflowIds: nextOverflowIds,
+                    geometryById: nextGeometryById,
+                };
+                nodeSpatialIndexCacheRef.current = appendedIndex;
+                return appendedIndex;
+            }
+        }
+
         if (prevIndex && prevIndex.geometryById.size === nodes.length) {
             let geometryUnchanged = true;
             const changedRefs: NodeData[] = [];

@@ -19,6 +19,7 @@ function useStableCallback<T extends (...args: any[]) => any>(callback: T): T {
 interface CanvasNodeItemProps {
     node: NodeData;
     selected: boolean;
+    bulkConnectTarget: boolean;
     showControls: boolean;
     inputs: { src: string; isVideo: boolean }[];
     isDark: boolean;
@@ -47,6 +48,7 @@ interface CanvasNodeItemProps {
 const CanvasNodeItem = React.memo(({
     node,
     selected,
+    bulkConnectTarget,
     showControls,
     inputs,
     isDark,
@@ -74,6 +76,7 @@ const CanvasNodeItem = React.memo(({
     <BaseNode
         data={node}
         selected={selected}
+        bulkConnectTarget={bulkConnectTarget}
         onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
         onTouchStart={(e) => handleNodeTouchStart(e, node.id)}
         onTouchEnd={(e) => handleNodeTouchEnd(e, node.id)}
@@ -106,6 +109,7 @@ const CanvasNodeItem = React.memo(({
 ), (prev, next) => {
     return prev.node === next.node &&
         prev.selected === next.selected &&
+        prev.bulkConnectTarget === next.bulkConnectTarget &&
         prev.showControls === next.showControls &&
         prev.inputs === next.inputs &&
         prev.isDark === next.isDark &&
@@ -128,6 +132,7 @@ interface CanvasAreaProps {
     selectedConnectionId: string | null;
     selectionBox: { x: number; y: number; w: number; h: number } | null;
     dragMode: string;
+    bulkConnectSourceIds: Set<string> | null;
     draggingNodeIds: Set<string>;
     tempConnection: Point | null;
     suggestedNodes: NodeData[];
@@ -155,6 +160,7 @@ interface CanvasAreaProps {
     handleGroupSelection: () => void;
     handleUngroup: () => void;
     handleGroupColorChange: (color: string) => void;
+    setBulkConnectSourceIds: React.Dispatch<React.SetStateAction<Set<string> | null>>;
     getSelectionCenter: (transform: CanvasTransform) => { x: number; y: number } | null;
     // Canvas handlers
     handleMouseDown: (e: React.MouseEvent) => void;
@@ -187,13 +193,13 @@ interface CanvasAreaProps {
 const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
     containerRef, connectionStartRef,
     nodes, visibleNodes, visibleConnections, nodeById, transform, canvasBg,
-    selectedNodeIds, selectedConnectionId, selectionBox, dragMode,
+    selectedNodeIds, selectedConnectionId, selectionBox, dragMode, bulkConnectSourceIds,
     draggingNodeIds, tempConnection, suggestedNodes, showMinimap, showColorPicker, nextGroupColor,
     viewportSize, isDark,
     getInputImages, updateNodeData, handleGenerate, handleMaximize, handleDownload, handleUploadToAssetLibrary,
     handleToolbarAction, handleUpload, deleteNode, setPreviewMedia, setSelectedConnectionId, setShowColorPicker,
     removeConnection, setShowMinimap,
-    handleGroupSelection, handleUngroup, handleGroupColorChange, getSelectionCenter,
+    handleGroupSelection, handleUngroup, handleGroupColorChange, setBulkConnectSourceIds, getSelectionCenter,
     handleMouseDown, handleMouseMove, handleMouseUp, handleWheel,
     handleCanvasContextMenu, handleCanvasDoubleClick, handleDragOver, handleDrop,
     handleTouchStart, handleTouchMove, handleTouchEnd,
@@ -211,6 +217,14 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
         : false;
     const showGroupToolbar = isMultiSelect || singleGroupSelected;
     const groupToolbarPos = showGroupToolbar ? getSelectionCenter(transform) : null;
+    const bulkConnectSourceCount = useMemo(
+        () => Array.from(selectedNodeIds).filter(id => {
+            const node = nodeById.get(id);
+            return !!node && node.type !== NodeType.GROUP;
+        }).length,
+        [selectedNodeIds, nodeById]
+    );
+    const isBulkConnectMode = !!bulkConnectSourceIds && bulkConnectSourceIds.size > 0;
     const isSelecting = dragMode === 'SELECT' || dragMode === 'DRAG_NODE';
     const [activeControlNodeId, setActiveControlNodeId] = useState<string | null>(null);
     const renderedNodeList = useMemo(() => {
@@ -299,9 +313,9 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
                             <g key={conn.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedConnectionId(conn.id); }}>
                                 <path d={d} stroke={isSelected ? (isDark ? "#ffffff" : "#000000") : (isDark ? "#52525b" : "#a1a1aa")} strokeWidth={2} fill="none" className="transition-colors duration-200 group-hover:stroke-cyan-500" />
                                 <path d={d} stroke="transparent" strokeWidth={20} fill="none" />
-                                <foreignObject x={(sx + tx) / 2 - 12} y={(sy + ty) / 2 - 12} width={24} height={24} className={`overflow-visible pointer-events-auto transition-opacity duration-200 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                    <button className={`w-6 h-6 flex items-center justify-center border rounded-full transition-all shadow-md focus:outline-none ${isDark ? 'bg-[#1A1D21] border-zinc-600 text-zinc-400 hover:text-red-500 hover:border-red-500' : 'bg-white border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-600'}`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} title="Disconnect">
-                                        <Icons.Scissors size={14} />
+                                <foreignObject x={(sx + tx) / 2 - 16} y={(sy + ty) / 2 - 16} width={32} height={32} className={`overflow-visible pointer-events-auto transition-opacity duration-200 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                                    <button className={`w-8 h-8 flex items-center justify-center border rounded-full transition-all shadow-md focus:outline-none ${isDark ? 'bg-[#1A1D21] border-zinc-600 text-zinc-400 hover:text-red-500 hover:border-red-500' : 'bg-white border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-600'}`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} title="Disconnect">
+                                        <Icons.Scissors size={17} />
                                     </button>
                                 </foreignObject>
                             </g>
@@ -325,11 +339,17 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
                 {/* Nodes */}
                 {renderedNodeList.map(node => {
                     const isNodeSelected = selectedNodeIds.has(node.id);
+                    const isBulkTarget =
+                        isBulkConnectMode &&
+                        !selectedNodeIds.has(node.id) &&
+                        node.type !== NodeType.ORIGINAL_IMAGE &&
+                        node.type !== NodeType.GROUP;
                     return (
                         <CanvasNodeItem
                             key={node.id}
                             node={node}
                             selected={isNodeSelected}
+                            bulkConnectTarget={isBulkTarget}
                             showControls={activeControlNodeId === node.id}
                             inputs={getInputImages(node.id)}
                             isDark={isDark}
@@ -414,11 +434,39 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
                     currentColor={nextGroupColor}
                     showColorPicker={showColorPicker}
                     singleGroupSelected={!!singleGroupSelected}
+                    canBulkConnect={isMultiSelect && bulkConnectSourceCount > 0}
+                    isBulkConnectMode={isBulkConnectMode}
                     onToggleColorPicker={() => setShowColorPicker(!showColorPicker)}
                     onColorChange={handleGroupColorChange}
                     onGroup={handleGroupSelection}
                     onUngroup={handleUngroup}
+                    onBulkConnect={() => {
+                        if (bulkConnectSourceCount <= 0) return;
+                        setBulkConnectSourceIds(prev => (
+                            prev && prev.size > 0
+                                ? null
+                                : new Set(
+                                    Array.from(selectedNodeIds).filter(id => {
+                                        const node = nodeById.get(id);
+                                        return !!node && node.type !== NodeType.GROUP;
+                                    })
+                                )
+                        ));
+                    }}
                 />
+            )}
+
+            {isBulkConnectMode && groupToolbarPos && (
+                <div
+                    className="absolute z-[160] pointer-events-none"
+                    style={{ left: groupToolbarPos.x, top: groupToolbarPos.y - 18, transform: 'translate(-50%, -100%)' }}
+                >
+                    <div className={`px-3 py-1.5 rounded-full text-[11px] font-semibold shadow-lg border backdrop-blur-md whitespace-nowrap ${
+                        isDark ? 'bg-[#1A1D21]/95 border-cyan-500/35 text-cyan-100' : 'bg-white/95 border-cyan-200 text-cyan-700'
+                    }`}>
+                        点目标节点，连接 {bulkConnectSourceIds?.size || 0} 个已选节点。按 Esc 或点空白取消。
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -429,6 +477,7 @@ export const CanvasArea = React.memo(CanvasAreaComponent, (prev, next) => {
     if (prev.visibleNodes !== next.visibleNodes) return false;
     if (prev.visibleConnections !== next.visibleConnections) return false;
     if (prev.selectedNodeIds !== next.selectedNodeIds) return false;
+    if (prev.bulkConnectSourceIds !== next.bulkConnectSourceIds) return false;
     if (prev.draggingNodeIds !== next.draggingNodeIds) return false;
     if (prev.selectedConnectionId !== next.selectedConnectionId) return false;
     if (prev.dragMode !== next.dragMode) return false;

@@ -159,6 +159,7 @@ interface UseNodeOperationsProps {
     selectedNodeIds: Set<string>;
     setSelectedNodeIds: React.Dispatch<React.SetStateAction<Set<string>>>;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
+    markInteractionActivity: () => void;
     screenToWorld: (x: number, y: number) => { x: number, y: number };
     getInputImages: (nodeId: string) => { src: string, isVideo: boolean }[];
     containerRef: React.RefObject<HTMLDivElement>;
@@ -174,13 +175,22 @@ export const useNodeOperations = ({
     selectedNodeIds,
     setSelectedNodeIds,
     updateNodeData,
+    markInteractionActivity,
     screenToWorld,
     getInputImages,
     containerRef,
 }: UseNodeOperationsProps) => {
     const generatingNodeIdsRef = useRef<Set<string>>(new Set());
+    const selectNodeRafRef = useRef<number | null>(null);
 
     const addNode = useCallback((type: NodeType, x?: number, y?: number, dataOverride?: Partial<NodeData>) => {
+        markInteractionActivity();
+
+        if (selectNodeRafRef.current !== null) {
+            window.cancelAnimationFrame(selectNodeRafRef.current);
+            selectNodeRafRef.current = null;
+        }
+
         if (x === undefined || y === undefined) {
             if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
@@ -233,9 +243,12 @@ export const useNodeOperations = ({
         };
         
         setNodes(prev => [...prev, newNode]);
-        setSelectedNodeIds(new Set([newNode.id]));
+        selectNodeRafRef.current = window.requestAnimationFrame(() => {
+            selectNodeRafRef.current = null;
+            setSelectedNodeIds(new Set([newNode.id]));
+        });
         return newNode;
-    }, [containerRef, screenToWorld, setNodes, setSelectedNodeIds]);
+    }, [containerRef, markInteractionActivity, screenToWorld, setNodes, setSelectedNodeIds]);
 
     const deleteNode = useCallback((id: string) => {
         const node = nodes.find(n => n.id === id);

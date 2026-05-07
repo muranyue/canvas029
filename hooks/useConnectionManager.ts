@@ -79,13 +79,50 @@ export const useConnectionManager = ({
     }, [inputsMap]);
 
     const createConnection = useCallback((sourceId: string, targetId: string) => {
-        if (!connections.some(c => c.sourceId === sourceId && c.targetId === targetId)) {
-            setConnections(prev => [...prev, { id: generateId(), sourceId, targetId }]);
-        }
+        setConnections(prev => {
+            if (prev.some(c => c.sourceId === sourceId && c.targetId === targetId)) {
+                return prev;
+            }
+            return [...prev, { id: generateId(), sourceId, targetId }];
+        });
         setDragMode('NONE');
         setTempConnection(null);
         setSuggestedNodes([]);
-    }, [connections, setConnections, setDragMode, setTempConnection, setSuggestedNodes]);
+    }, [setConnections, setDragMode, setTempConnection, setSuggestedNodes]);
+
+    const createConnections = useCallback((sourceIds: string[], targetId: string) => {
+        const normalizedSourceIds = Array.from(
+            new Set(
+                (sourceIds || [])
+                    .map(id => String(id || '').trim())
+                    .filter(id => !!id && id !== targetId)
+            )
+        );
+
+        if (normalizedSourceIds.length === 0) {
+            setDragMode('NONE');
+            setTempConnection(null);
+            setSuggestedNodes([]);
+            return;
+        }
+
+        setConnections(prev => {
+            const existingPairs = new Set(prev.map(conn => `${conn.sourceId}::${conn.targetId}`));
+            const additions = normalizedSourceIds
+                .filter(sourceId => !existingPairs.has(`${sourceId}::${targetId}`))
+                .map(sourceId => ({ id: generateId(), sourceId, targetId }));
+
+            if (additions.length === 0) {
+                return prev;
+            }
+
+            return [...prev, ...additions];
+        });
+
+        setDragMode('NONE');
+        setTempConnection(null);
+        setSuggestedNodes([]);
+    }, [setConnections, setDragMode, setTempConnection, setSuggestedNodes]);
 
     const removeConnection = useCallback((id: string) => {
         setConnections(prev => prev.filter(c => c.id !== id));
@@ -96,6 +133,7 @@ export const useConnectionManager = ({
         inputsMap,
         getInputImages,
         createConnection,
+        createConnections,
         removeConnection,
     };
 };

@@ -27,6 +27,7 @@ interface CanvasStateSetters {
     contextMenu: any;
     quickAddMenu: any;
     showColorPicker: boolean;
+    bulkConnectSourceIds: Set<string> | null;
     desktopPlatform: 'WIN' | 'MAC';
     setNodes: (value: NodeData[] | ((prev: NodeData[]) => NodeData[])) => void;
     setConnections: (value: Connection[] | ((prev: Connection[]) => Connection[])) => void;
@@ -46,6 +47,7 @@ interface CanvasStateSetters {
     setShowColorPicker: (value: boolean | ((prev: boolean) => boolean)) => void;
     setNextGroupColor: (value: string | ((prev: string) => string)) => void;
     setDraggingNodeIds: (value: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+    setBulkConnectSourceIds: (value: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
     getNodesIntersectingBounds: (left: number, top: number, right: number, bottom: number) => NodeData[];
     screenToWorld: (x: number, y: number) => Point;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
@@ -56,6 +58,7 @@ interface CanvasOperations {
     addNode: (type: NodeType, x: number, y: number, overrides?: Partial<NodeData>) => NodeData;
     generateId: () => string;
     createConnection: (sourceId: string, targetId: string) => void;
+    createConnections: (sourceIds: string[], targetId: string) => void;
 }
 
 export interface UseCanvasHandlersProps {
@@ -73,16 +76,17 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
 
     const {
         nodes, connections, transform, selectedNodeIds, selectedConnectionId, dragMode,
-        contextMenu, quickAddMenu, showColorPicker, desktopPlatform,
+        contextMenu, quickAddMenu, showColorPicker, bulkConnectSourceIds, desktopPlatform,
         setNodes, setConnections, setTransform, setDeletedNodes,
         setSelectedNodeIds, setSelectedConnectionId, setSelectionBox, setDragMode,
         setTempConnection, setSuggestedNodes, setContextMenu, setQuickAddMenu,
         setShowNewWorkflowDialog, setPreviewMedia, setCanvasBg, setShowColorPicker, setNextGroupColor, setDraggingNodeIds,
+        setBulkConnectSourceIds,
         getNodesIntersectingBounds, screenToWorld, updateNodeData, markInteractionActivity,
     } = state;
 
     const {
-        addNode, generateId, createConnection,
+        addNode, generateId, createConnection, createConnections,
     } = ops;
 
     const transformLiveRef = useRef(transform);
@@ -620,12 +624,17 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
             e.preventDefault(); return;
         }
         if (e.target === containerRef.current && e.button === 0) {
+            if (bulkConnectSourceIds) {
+                setBulkConnectSourceIds(null);
+                e.preventDefault();
+                return;
+            }
             setDragMode('SELECT');
             dragStartRef.current = { x: e.clientX, y: e.clientY };
             setSelectionBox({ x: 0, y: 0, w: 0, h: 0 });
             if (!e.shiftKey) setSelectedNodeIds(new Set());
         }
-    }, [contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, desktopPlatform, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef, markInteractionActivity]);
+    }, [bulkConnectSourceIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, desktopPlatform, transform, spacePressed, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setBulkConnectSourceIds, setDragMode, setSelectionBox, setSelectedNodeIds, containerRef, dragStartRef, initialTransformRef, markInteractionActivity]);
 
     const handleMouseMove = useCallback((e: any) => {
         if (dragMode !== 'NONE' || pendingNodeDragRef.current) {
@@ -751,6 +760,16 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (showColorPicker) setShowColorPicker(false);
     };
 
+    const isValidBulkConnectTarget = useCallback((nodeId: string) => {
+        if (!bulkConnectSourceIds || bulkConnectSourceIds.size === 0) return false;
+        if (bulkConnectSourceIds.has(nodeId)) return false;
+
+        const node = nodes.find(n => n.id === nodeId);
+        if (!node) return false;
+
+        return node.type !== NodeType.ORIGINAL_IMAGE && node.type !== NodeType.GROUP;
+    }, [bulkConnectSourceIds, nodes]);
+
     const updateSelectionForPointerDown = (id: string, isShift: boolean) => {
         const isAlreadySelected = selectedNodeIds.has(id);
 
@@ -852,12 +871,20 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (isExcludedTarget(target)) return;
         if (!target.closest('[data-drag-handle="true"]')) return;
         e.stopPropagation();
+        if (bulkConnectSourceIds) {
+            if (e.button === 0 && isValidBulkConnectTarget(id)) {
+                createConnections(Array.from(bulkConnectSourceIds), id);
+                setBulkConnectSourceIds(null);
+                setSelectedNodeIds(new Set([id]));
+            }
+            return;
+        }
         clearMenus();
         if (e.button === 0) {
             const selection = updateSelectionForPointerDown(id, e.shiftKey);
             pendingNodeDragRef.current = { id, clientX: e.clientX, clientY: e.clientY, selection };
         }
-    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, getNodesIntersectingBounds, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
+    }, [nodes, selectedNodeIds, bulkConnectSourceIds, isValidBulkConnectTarget, createConnections, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setBulkConnectSourceIds, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, getNodesIntersectingBounds, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
 
     const handleNodeTouchStart = useCallback((e: any, id: string) => {
         markInteractionActivity();
@@ -865,13 +892,21 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
         if (isExcludedTarget(target)) return;
         if (!target.closest('[data-drag-handle="true"]')) return;
         e.stopPropagation();
+        if (bulkConnectSourceIds) {
+            if (isValidBulkConnectTarget(id)) {
+                createConnections(Array.from(bulkConnectSourceIds), id);
+                setBulkConnectSourceIds(null);
+                setSelectedNodeIds(new Set([id]));
+            }
+            return;
+        }
         clearMenus();
         if (e.touches.length === 1) {
             const touch = e.touches[0];
             const selection = updateSelectionForPointerDown(id, false);
             pendingNodeDragRef.current = { id, clientX: touch.clientX, clientY: touch.clientY, selection };
         }
-    }, [nodes, selectedNodeIds, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
+    }, [nodes, selectedNodeIds, bulkConnectSourceIds, isValidBulkConnectTarget, createConnections, contextMenu, quickAddMenu, selectedConnectionId, showColorPicker, setContextMenu, setQuickAddMenu, setSelectedConnectionId, setShowColorPicker, setBulkConnectSourceIds, setDragMode, setSelectedNodeIds, setNodes, setNextGroupColor, dragStartRef, initialNodePositionsRef, draggingNodesRef, markInteractionActivity]);
 
     const handleNodeTouchEnd = useCallback((e: any, id: string) => {
         if (dragMode === 'NONE') {
