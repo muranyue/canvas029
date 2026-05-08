@@ -423,4 +423,5 @@ export const saveSd2AssetLibrary = (list: Sd2AssetItem[]) => {
         return clone;
     });
     localStorage.setItem(SD2_ASSET_LIBRARY_KEY, JSON.stringify(persisted));
+    window.dispatchEvent(new CustomEvent('sd2AssetLibraryUpdated', { detail: { count: persisted.length } }));
 };

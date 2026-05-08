@@ -5,6 +5,13 @@ const EMPTY_ARRAY: { src: string, isVideo: boolean }[] = [];
 type InputEntry = { src: string; isVideo: boolean };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+const getPrimaryConnectedMedia = (node: NodeData): InputEntry | null => {
+    // Downstream connections should only consume one "main" media item per node.
+    // For images we prefer the original-resolution source of the current primary image.
+    const src = node.videoSrc || node.originalImageSrc || node.imageSrc;
+    if (!src) return null;
+    return { src, isVideo: !!node.videoSrc };
+};
 
 interface UseConnectionManagerProps {
     nodes: NodeData[];
@@ -28,9 +35,9 @@ export const useConnectionManager = ({
     const sourceMediaById = useMemo(() => {
         const map = new Map<string, InputEntry>();
         for (const node of nodes) {
-            const src = node.videoSrc || node.originalImageSrc || node.imageSrc;
-            if (!src) continue;
-            map.set(node.id, { src, isVideo: !!node.videoSrc });
+            const primaryMedia = getPrimaryConnectedMedia(node);
+            if (!primaryMedia) continue;
+            map.set(node.id, primaryMedia);
         }
         return map;
     }, [nodes]);

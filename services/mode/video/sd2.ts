@@ -340,6 +340,27 @@ const extractError = (payload: any): string => {
     return "Unknown error";
 };
 
+const hasTerminalSd2Error = (payload: any): boolean => {
+    const message = extractError(payload);
+    if (message && message !== "Unknown error") {
+        return true;
+    }
+
+    const codeCandidates = [
+        payload?.code,
+        payload?.error?.code,
+        payload?.data?.code,
+        payload?.data?.error?.code
+    ];
+
+    return codeCandidates.some((candidate) => {
+        if (candidate === undefined || candidate === null) return false;
+        if (typeof candidate === "number") return candidate !== 0;
+        const normalized = String(candidate).trim().toLowerCase();
+        return normalized.length > 0 && normalized !== "0" && normalized !== "success" && normalized !== "ok";
+    });
+};
+
 const resolveSd2CreateEndpoint = (config: ModelConfig): string => {
     const endpoint = String(config.endpoint || "").trim();
     if (!endpoint) return SD2_CONTENTS_CREATE_ENDPOINT;
@@ -455,6 +476,10 @@ export const generateSD2Video = async (
         try {
             const check = await fetchThirdParty(queryUrl, "GET", null, config, { timeout: 15000 });
             const status = extractStatus(check);
+
+            if (hasTerminalSd2Error(check) && !["SUCCESS", "SUCCEEDED", "COMPLETED", "OK"].includes(status)) {
+                throw new Error(`SD 2.0 failed: ${extractError(check)}`);
+            }
 
             if (["SUCCESS", "SUCCEEDED", "COMPLETED", "OK"].includes(status)) {
                 const url = extractVideoUrl(check);

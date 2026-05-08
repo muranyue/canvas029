@@ -648,6 +648,20 @@ export const TextToVideoNode: React.FC<TextToVideoNodeProps> = ({
         setSdAssetLibrary(loadSd2AssetLibrary());
     }, [isSd2Model]);
 
+    useEffect(() => {
+        if (!isSd2Model) return;
+
+        const handleAssetLibraryUpdated = () => {
+            const nextLibrary = loadSd2AssetLibrary();
+            setSdAssetLibrary(nextLibrary);
+        };
+
+        window.addEventListener('sd2AssetLibraryUpdated', handleAssetLibraryUpdated);
+        return () => {
+            window.removeEventListener('sd2AssetLibraryUpdated', handleAssetLibraryUpdated);
+        };
+    }, [isSd2Model]);
+
     const commitPromptToNode = useCallback((nextPrompt?: string) => {
         const normalizedValue = normalizePromptInput(nextPrompt ?? promptDraftRef.current);
         promptDraftRef.current = normalizedValue;
