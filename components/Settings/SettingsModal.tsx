@@ -81,6 +81,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     // File Input Ref for Import
     const configInputRef = useRef<HTMLInputElement>(null);
 
+    const buildConfigSnapshot = (): Record<string, ModelConfig> => {
+        const snapshot: Record<string, ModelConfig> = {};
+        Object.keys(MODEL_REGISTRY).forEach((key) => {
+            const current = configs[key] || getModelConfig(key);
+            snapshot[key] = {
+                baseUrl: current.baseUrl || '',
+                key: current.key || '',
+                modelId: current.modelId || '',
+                endpoint: current.endpoint || '',
+                queryEndpoint: current.queryEndpoint || '',
+                downloadEndpoint: current.downloadEndpoint || '',
+            };
+        });
+        return snapshot;
+    };
+
+    const normalizeImportedConfig = (modelName: string, raw: any): ModelConfig => {
+        const fallback = getModelConfig(modelName);
+        return {
+            baseUrl: typeof raw?.baseUrl === 'string' ? raw.baseUrl : fallback.baseUrl,
+            key: typeof raw?.key === 'string' ? raw.key : fallback.key,
+            modelId: typeof raw?.modelId === 'string' ? raw.modelId : fallback.modelId,
+            endpoint: typeof raw?.endpoint === 'string' ? raw.endpoint : fallback.endpoint,
+            queryEndpoint: typeof raw?.queryEndpoint === 'string' ? raw.queryEndpoint : (fallback.queryEndpoint || ''),
+            downloadEndpoint: typeof raw?.downloadEndpoint === 'string' ? raw.downloadEndpoint : (fallback.downloadEndpoint || ''),
+        };
+    };
+
     // Load configs when opening
     useEffect(() => {
         if (isOpen) {
@@ -163,9 +191,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
     // --- Import / Export Handlers ---
     const handleExportConfig = () => {
         const exportData: any = {
-            version: 1,
+            version: 2,
             timestamp: new Date().toISOString(),
-            configs: {},
+            configs: buildConfigSnapshot(),
             customModels: {}
         };
 
@@ -176,15 +204,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 exportData.customModels = JSON.parse(customModels);
             }
         } catch (e) { console.error("Error exporting custom models", e); }
-
-        // Export Configurations
-        Object.keys(MODEL_REGISTRY).forEach(key => {
-            const config = getModelConfig(key);
-            // Only export if customized (has key or modified endpoint)
-            if (config.key || config.endpoint !== MODEL_REGISTRY[key].defaultEndpoint) {
-                exportData.configs[key] = config;
-            }
-        });
 
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -218,7 +237,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, i
                 // Import Configs
                 if (data.configs) {
                     Object.entries(data.configs).forEach(([key, val]: [string, any]) => {
-                        saveModelConfig(key, val as ModelConfig);
+                        saveModelConfig(key, normalizeImportedConfig(key, val));
                         importedCount++;
                     });
                 }
