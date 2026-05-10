@@ -9,7 +9,7 @@ interface MediaStackProps {
     updateData: (id: string, updates: Partial<NodeData>) => void;
     currentSrc: string | undefined;
     type: 'image' | 'video';
-    onMaximize?: (id: string) => void;
+    onMaximize?: (id: string, media?: { url: string; type: 'image' | 'video' }) => void;
     isDark?: boolean;
     selected?: boolean;
 }
@@ -19,7 +19,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
 }) => {
     const stackRef = useRef<HTMLDivElement>(null);
     const artifacts = data.outputArtifacts || [];
-    const originalArtifacts = data.outputOriginalArtifacts || artifacts;
+    const originalArtifacts = data.outputOriginalArtifacts || [];
     const sortedArtifacts = (() => {
         const entries: { displaySrc: string; originalSrc: string }[] = [];
         const seen = new Set<string>();
@@ -41,7 +41,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
         for (let i = 0; i < total; i++) {
             const displaySrc = artifacts[i] || originalArtifacts[i];
             const originalSrc = type === 'image'
-                ? (originalArtifacts[i] || artifacts[i])
+                ? (originalArtifacts[i] || '')
                 : (artifacts[i] || originalArtifacts[i]);
             append(displaySrc, originalSrc);
         }
@@ -89,7 +89,7 @@ export const MediaStack: React.FC<MediaStackProps> = ({
                                        <Icons.Check size={10} className="text-cyan-400" /><span>Main</span>
                                    </button>
                                )}
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }}><Icons.Maximize2 size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id, { url: type === 'image' ? entry.originalSrc : entry.displaySrc, type }); }}><Icons.Maximize2 size={12}/></button>
                                <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(type === 'image' ? entry.originalSrc : entry.displaySrc, type); }}><Icons.Download size={12}/></button>
                            </div>
                            

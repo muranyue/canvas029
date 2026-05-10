@@ -14,7 +14,7 @@ interface NodeContentProps {
   selected?: boolean;
   showControls?: boolean;
   inputs?: { src: string, isVideo: boolean }[];
-  onMaximize?: (id: string) => void;
+  onMaximize?: (id: string, media?: { url: string; type: 'image' | 'video' }) => void;
   onDownload?: (id: string) => void;
   onUploadToAssetLibrary?: (id: string) => void;
   onToolbarAction?: (nodeId: string, action: string) => void;

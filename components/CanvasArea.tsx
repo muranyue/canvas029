@@ -4,6 +4,7 @@ import BaseNode from './Nodes/BaseNode';
 import { NodeContent } from './Nodes/NodeContent';
 import { Minimap } from './Minimap';
 import { GroupToolbar } from './GroupToolbar';
+import { ConnectionsLayer } from './ConnectionsLayer';
 import { Icons } from './Icons';
 
 function useStableCallback<T extends (...args: any[]) => any>(callback: T): T {
@@ -26,7 +27,7 @@ interface CanvasNodeItemProps {
     isSelecting: boolean;
     updateNodeData: (id: string, updates: Partial<NodeData>) => void;
     handleGenerate: (id: string) => void;
-    handleMaximize: (id: string, setPreviewMedia: any) => void;
+    handleMaximize: (id: string, setPreviewMedia: any, media?: { url: string; type: 'image' | 'video' }) => void;
     handleDownload: (id: string) => void;
     handleUploadToAssetLibrary: (id: string) => void;
     handleToolbarAction: (nodeId: string, action: string) => void;
@@ -96,7 +97,7 @@ const CanvasNodeItem = React.memo(({
             selected={selected}
             showControls={showControls}
             inputs={inputs}
-            onMaximize={(id) => handleMaximize(id, setPreviewMedia)}
+            onMaximize={(id, media) => handleMaximize(id, setPreviewMedia, media)}
             onDownload={handleDownload}
             onUploadToAssetLibrary={handleUploadToAssetLibrary}
             onDelete={deleteNode}
@@ -294,42 +295,18 @@ const CanvasAreaComponent: React.FC<CanvasAreaProps> = ({
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
         >
-            {/* Connections SVG - Outside transform div, uses internal g transform */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-0">
-                <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
-                    {visibleConnections.map(conn => {
-                        const source = nodeById.get(conn.sourceId);
-                        const target = nodeById.get(conn.targetId);
-                        if (!source || !target) return null;
-                        const sx = source.x + source.width;
-                        const sy = source.y + source.height / 2;
-                        const tx = target.x;
-                        const ty = target.y + target.height / 2;
-                        const dist = Math.abs(tx - sx);
-                        const cp = Math.min(80, Math.max(24, dist / 2));
-                        const d = `M ${sx} ${sy} C ${sx + cp} ${sy}, ${tx - cp} ${ty}, ${tx} ${ty}`;
-                        const isSelected = selectedConnectionId === conn.id;
-                        return (
-                            <g key={conn.id} className="pointer-events-auto cursor-pointer group" onClick={(e) => { e.stopPropagation(); setSelectedConnectionId(conn.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedConnectionId(conn.id); }}>
-                                <path d={d} stroke={isSelected ? (isDark ? "#ffffff" : "#000000") : (isDark ? "#52525b" : "#a1a1aa")} strokeWidth={2} fill="none" className="transition-colors duration-200 group-hover:stroke-cyan-500" />
-                                <path d={d} stroke="transparent" strokeWidth={20} fill="none" />
-                                <foreignObject x={(sx + tx) / 2 - 16} y={(sy + ty) / 2 - 16} width={32} height={32} className={`overflow-visible pointer-events-auto transition-opacity duration-200 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-                                    <button className={`w-8 h-8 flex items-center justify-center border rounded-full transition-all shadow-md focus:outline-none ${isDark ? 'bg-[#1A1D21] border-zinc-600 text-zinc-400 hover:text-red-500 hover:border-red-500' : 'bg-white border-gray-300 text-gray-400 hover:text-red-600 hover:border-red-600'}`} onClick={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); removeConnection(conn.id); }} title="Disconnect">
-                                        <Icons.Scissors size={17} />
-                                    </button>
-                                </foreignObject>
-                            </g>
-                        );
-                    })}
-                    {dragMode === 'CONNECT' && connectionStartRef.current && tempConnection && (() => {
-                        const startNode = nodeById.get(connectionStartRef.current?.nodeId || '');
-                        if (!startNode) return null;
-                        return (
-                            <path d={`M ${startNode.x + startNode.width} ${startNode.y + startNode.height / 2} L ${tempConnection.x} ${tempConnection.y}`} stroke={isDark ? "#52525b" : "#a1a1aa"} strokeWidth={2} strokeDasharray="5,5" fill="none" />
-                        );
-                    })()}
-                </g>
-            </svg>
+            <ConnectionsLayer
+                connections={visibleConnections}
+                nodeById={nodeById}
+                transform={transform}
+                selectedConnectionId={selectedConnectionId}
+                isDark={isDark}
+                dragMode={dragMode}
+                connectionStartNodeId={connectionStartRef.current?.nodeId || null}
+                tempConnection={tempConnection}
+                onSelectConnection={setSelectedConnectionId}
+                onRemoveConnection={removeConnection}
+            />
 
             {/* Canvas Content - Nodes */}
             <div

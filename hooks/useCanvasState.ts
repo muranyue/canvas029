@@ -175,25 +175,26 @@ const normalizeNodesForLoad = (nodes: NodeData[]): NodeData[] => {
         
         // Keep display/original artifact arrays aligned and remove invalid blob URLs
         const displayArtifacts = node.outputArtifacts || [];
-        const originalArtifacts = node.outputOriginalArtifacts || displayArtifacts;
+        const originalArtifacts = node.outputOriginalArtifacts || [];
         if (displayArtifacts.length > 0 || originalArtifacts.length > 0) {
             const normalizedPairs: { display: string; original: string }[] = [];
             const total = Math.max(displayArtifacts.length, originalArtifacts.length);
             for (let i = 0; i < total; i++) {
-                const displayCandidate = displayArtifacts[i] || originalArtifacts[i];
-                const originalCandidate = originalArtifacts[i] || displayArtifacts[i];
+                const displayCandidate = displayArtifacts[i];
+                const originalCandidate = originalArtifacts[i];
                 if (!displayCandidate && !originalCandidate) continue;
                 const validDisplay = displayCandidate && !isBlobUrl(displayCandidate) ? displayCandidate : undefined;
                 const validOriginal = originalCandidate && !isBlobUrl(originalCandidate) ? originalCandidate : undefined;
                 if (!validDisplay && !validOriginal) continue;
+                const displayCanActAsOriginal = !!validDisplay && !isInlineMediaUrl(validDisplay);
                 normalizedPairs.push({
                     display: validDisplay || validOriginal || '',
-                    original: validOriginal || validDisplay || '',
+                    original: validOriginal || (displayCanActAsOriginal ? validDisplay || '' : ''),
                 });
             }
 
             updates.outputArtifacts = normalizedPairs.map((pair) => pair.display);
-            if (!isVideoNode || (node.outputOriginalArtifacts && node.outputOriginalArtifacts.length > 0)) {
+            if (!isVideoNode) {
                 updates.outputOriginalArtifacts = normalizedPairs.map((pair) => pair.original);
             }
 
@@ -219,7 +220,7 @@ const normalizeNodesForLoad = (nodes: NodeData[]): NodeData[] => {
                 ? updates.originalImageSrc
                 : (updates.originalImageSrc ?? node.originalImageSrc ?? node.imageSrc);
 
-            if (!resolvedOriginalSrc && resolvedImageSrc) {
+            if (!resolvedOriginalSrc && resolvedImageSrc && (!node.outputOriginalArtifacts || node.outputOriginalArtifacts.length === 0)) {
                 updates.originalImageSrc = resolvedImageSrc;
             }
             if (!resolvedImageSrc && resolvedOriginalSrc) {
@@ -247,13 +248,13 @@ const stripHeavyMediaForFallback = (nodes: NodeData[]): NodeData[] => {
         }
 
         const displayArtifacts = nextNode.outputArtifacts || [];
-        const originalArtifacts = nextNode.outputOriginalArtifacts || displayArtifacts;
+        const originalArtifacts = nextNode.outputOriginalArtifacts || [];
         if (displayArtifacts.length > 0 || originalArtifacts.length > 0) {
             const pairs: { display: string; original: string }[] = [];
             const total = Math.max(displayArtifacts.length, originalArtifacts.length);
             for (let i = 0; i < total; i++) {
-                const displayCandidate = displayArtifacts[i] || originalArtifacts[i];
-                const originalCandidate = originalArtifacts[i] || displayArtifacts[i];
+                const displayCandidate = displayArtifacts[i];
+                const originalCandidate = originalArtifacts[i];
                 if (!displayCandidate && !originalCandidate) continue;
                 const validDisplay = displayCandidate && !isInlineMediaUrl(displayCandidate) ? displayCandidate : undefined;
                 const validOriginal = originalCandidate && !isInlineMediaUrl(originalCandidate) ? originalCandidate : undefined;
@@ -264,7 +265,7 @@ const stripHeavyMediaForFallback = (nodes: NodeData[]): NodeData[] => {
                 });
             }
             nextNode.outputArtifacts = pairs.map((pair) => pair.display);
-            if (!isVideoNode || (nextNode.outputOriginalArtifacts && nextNode.outputOriginalArtifacts.length > 0)) {
+            if (!isVideoNode) {
                 nextNode.outputOriginalArtifacts = pairs.map((pair) => pair.original);
             }
 
@@ -279,7 +280,7 @@ const stripHeavyMediaForFallback = (nodes: NodeData[]): NodeData[] => {
         }
 
         if (!isVideoNode) {
-            if (!nextNode.originalImageSrc && nextNode.imageSrc) {
+            if (!nextNode.originalImageSrc && nextNode.imageSrc && (!nextNode.outputOriginalArtifacts || nextNode.outputOriginalArtifacts.length === 0)) {
                 nextNode.originalImageSrc = nextNode.imageSrc;
             }
             if (!nextNode.imageSrc && nextNode.originalImageSrc) {

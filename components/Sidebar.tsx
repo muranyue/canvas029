@@ -27,23 +27,33 @@ interface HistoryNodeEntry {
     nodeId: string;
     primarySrc: string;
     sources: string[];
+    originalSources?: string[];
     type: 'image' | 'video';
     title: string;
     resolution?: string;
 }
 
-const collectHistorySources = (currentSrc?: string, artifacts?: string[]) => {
+const collectHistoryMedia = (currentDisplaySrc?: string, displayArtifacts?: string[], currentOriginalSrc?: string, originalArtifacts?: string[]) => {
     const seen = new Set<string>();
-    const ordered = [...(currentSrc ? [currentSrc] : []), ...(artifacts || [])];
-    const result: string[] = [];
+    const ordered: { display: string; original: string }[] = [];
+    const displayList = [...(currentDisplaySrc ? [currentDisplaySrc] : []), ...(displayArtifacts || [])];
+    const originalList = [...(currentOriginalSrc ? [currentOriginalSrc] : []), ...(originalArtifacts || [])];
+    const total = Math.max(displayList.length, originalList.length);
 
-    ordered.forEach((src) => {
-        if (!src || seen.has(src)) return;
-        seen.add(src);
-        result.push(src);
-    });
+    for (let i = 0; i < total; i++) {
+        const display = displayList[i] || originalList[i] || '';
+        const original = originalList[i] || displayList[i] || '';
+        if (!display) continue;
+        const key = `${display}|||${original}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        ordered.push({ display, original });
+    }
 
-    return result;
+    return {
+        sources: ordered.map((item) => item.display),
+        originalSources: ordered.map((item) => item.original || item.display),
+    };
 };
 
 const HistoryItem = memo(({ entry, isExpanded, onClick }: { entry: HistoryNodeEntry, isExpanded: boolean, onClick: () => void }) => {
@@ -281,7 +291,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         if (node.isLoading) return [];
         if (node.type !== NodeType.TEXT_TO_IMAGE && node.type !== NodeType.ORIGINAL_IMAGE) return [];
 
-        const sources = collectHistorySources(node.imageSrc, node.outputArtifacts);
+        const { sources, originalSources } = collectHistoryMedia(
+            node.imageSrc,
+            node.outputArtifacts,
+            node.originalImageSrc,
+            node.outputOriginalArtifacts
+        );
         if (sources.length === 0) return [];
 
         return [{
@@ -289,6 +304,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             nodeId: node.id,
             primarySrc: (node.imageSrc && sources.includes(node.imageSrc)) ? node.imageSrc : sources[0],
             sources,
+            originalSources,
             type: 'image' as const,
             title: node.title,
             resolution: node.resolution,
@@ -299,7 +315,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         if (node.isLoading) return [];
         if (node.type !== NodeType.TEXT_TO_VIDEO) return [];
 
-        const sources = collectHistorySources(node.videoSrc, node.outputArtifacts);
+        const { sources } = collectHistoryMedia(node.videoSrc, node.outputArtifacts, node.videoSrc, node.outputArtifacts);
         if (sources.length === 0) return [];
 
         return [{
@@ -338,7 +354,10 @@ const Sidebar: React.FC<SidebarProps> = ({
                         isExpanded={expandedHistoryKey === entry.key}
                         onClick={() => {
                             if (entry.sources.length <= 1) {
-                                onPreviewMedia(entry.primarySrc, entry.type);
+                                const previewSrc = entry.type === 'image'
+                                    ? (entry.originalSources?.[0] || entry.primarySrc)
+                                    : entry.primarySrc;
+                                onPreviewMedia(previewSrc, entry.type);
                                 return;
                             }
                             setExpandedHistoryKey(prev => prev === entry.key ? null : entry.key);
@@ -356,6 +375,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                      <div className="grid grid-cols-2 gap-2 max-h-[220px] md:max-h-[180px] overflow-y-auto custom-scrollbar pr-1">
                          {expandedItem.sources.map((src, index) => {
                              const isCurrent = src === expandedItem.primarySrc;
+                             const previewSrc = expandedItem.type === 'image'
+                                 ? (expandedItem.originalSources?.[index] || src)
+                                 : src;
                              return (
                                  <button
                                      key={`${expandedItem.key}-source-${index}`}
@@ -363,12 +385,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                                      className={`relative aspect-square rounded-md overflow-hidden border transition-colors ${isCurrent ? 'border-cyan-500' : (isDark ? 'border-zinc-700 hover:border-zinc-500' : 'border-gray-300 hover:border-gray-400')}`}
                                      onClick={(e) => {
                                          e.stopPropagation();
-                                         onPreviewMedia(src, expandedItem.type);
+                                         onPreviewMedia(previewSrc, expandedItem.type);
                                      }}
                                      onTouchEnd={(e) => {
                                          e.preventDefault();
                                          e.stopPropagation();
-                                         onPreviewMedia(src, expandedItem.type);
+                                         onPreviewMedia(previewSrc, expandedItem.type);
                                      }}
                                  >
                                      {expandedItem.type === 'image' ? (

@@ -317,12 +317,12 @@ export const safeDownload = async (src: string) => {
     }
 };
 
-export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, currentSrc: string | undefined, onMaximize?: any, isDark?: boolean, selected?: boolean }> = ({ 
+export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, currentSrc: string | undefined, onMaximize?: (id: string, media?: { url: string; type: 'image' | 'video' }) => void, isDark?: boolean, selected?: boolean }> = ({ 
     data, updateData, currentSrc, onMaximize, isDark = true, selected
 }) => {
     const stackRef = useRef<HTMLDivElement>(null);
     const artifacts = data.outputArtifacts || [];
-    const originalArtifacts = data.outputOriginalArtifacts || artifacts;
+    const originalArtifacts = data.outputOriginalArtifacts || [];
     const sortedArtifacts = (() => {
         const entries: { displaySrc: string; originalSrc: string; isVideo: boolean }[] = [];
         const seen = new Set<string>();
@@ -353,7 +353,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
             const isVideo = isVideoNode || isVideoUrl(displaySrc) || isVideoUrl(originalArtifacts[i]);
             const originalSrc = isVideo
                 ? (displaySrc || originalArtifacts[i])
-                : (originalArtifacts[i] || artifacts[i]);
+                : (originalArtifacts[i] || '');
             append(displaySrc, originalSrc, isVideo);
         }
 
@@ -382,7 +382,7 @@ export const LocalMediaStack: React.FC<{ data: NodeData, updateData: any, curren
                            )}
                            <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-20 pointer-events-auto">
                                {!isMain && <button className="h-6 px-2 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-[9px] font-bold text-white transition-colors flex items-center gap-1 shadow-sm" onClick={(e) => { e.stopPropagation(); updateData(data.id, isVideo ? { videoSrc: entry.displaySrc, isStackOpen: false } : { imageSrc: entry.displaySrc, originalImageSrc: entry.originalSrc, isStackOpen: false }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); updateData(data.id, isVideo ? { videoSrc: entry.displaySrc, isStackOpen: false } : { imageSrc: entry.displaySrc, originalImageSrc: entry.originalSrc, isStackOpen: false }); }} data-interactive="true"><Icons.Check size={10} className="text-cyan-400" /><span>Main</span></button>}
-                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id); }} data-interactive="true"><Icons.Maximize2 size={12}/></button>
+                               <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); onMaximize?.(data.id, { url: isVideo ? entry.displaySrc : entry.originalSrc, type: isVideo ? 'video' : 'image' }); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onMaximize?.(data.id, { url: isVideo ? entry.displaySrc : entry.originalSrc, type: isVideo ? 'video' : 'image' }); }} data-interactive="true"><Icons.Maximize2 size={12}/></button>
                                <button className="w-6 h-6 flex items-center justify-center bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/10 rounded-md text-white transition-colors shadow-sm" onClick={(e) => { e.stopPropagation(); e.preventDefault(); safeDownload(isVideo ? entry.displaySrc : entry.originalSrc); }} onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); safeDownload(isVideo ? entry.displaySrc : entry.originalSrc); }} data-interactive="true"><Icons.Download size={12}/></button>
                            </div>
                            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[9px] text-white font-mono border border-white/10 select-none">#{index + 1}</div>

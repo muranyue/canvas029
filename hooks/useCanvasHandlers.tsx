@@ -388,7 +388,7 @@ export const useCanvasHandlers = ({ refs, state, ops }: UseCanvasHandlersProps) 
                         const src = event.target?.result as string;
                         const displaySrc = await createDisplayImageSrc(src);
                         const currentArtifacts = node.outputArtifacts || [];
-                        const currentOriginalArtifacts = node.outputOriginalArtifacts || node.outputArtifacts || [];
+                        const currentOriginalArtifacts = node.outputOriginalArtifacts || [];
                         updateNodeData(nodeId, {
                             imageSrc: displaySrc, originalImageSrc: src, width, height,
                             aspectRatio: `${ratio}:1`,

@@ -369,7 +369,15 @@ export const useNodeOperations = ({
         }
     }, [nodes, updateNodeData, getInputImages, setNodes]);
 
-    const handleMaximize = useCallback((nodeId: string, setPreviewMedia: (media: { url: string, type: 'image' | 'video' } | null) => void) => {
+    const handleMaximize = useCallback((
+        nodeId: string,
+        setPreviewMedia: (media: { url: string, type: 'image' | 'video' } | null) => void,
+        media?: { url: string; type: 'image' | 'video' }
+    ) => {
+        if (media?.url) {
+            setPreviewMedia(media);
+            return;
+        }
         const node = nodes.find(n => n.id === nodeId);
         if (!node) return;
         if (node.videoSrc) setPreviewMedia({ url: node.videoSrc, type: 'video' });

@@ -7,7 +7,7 @@ import { MediaStack } from './Shared/MediaStack';
 interface OriginalImageNodeProps {
   data: NodeData;
   updateData: (id: string, updates: Partial<NodeData>) => void;
-  onMaximize?: (id: string) => void;
+  onMaximize?: (id: string, media?: { url: string; type: 'image' | 'video' }) => void;
   onDownload?: (id: string) => void;
   onUploadToAssetLibrary?: (id: string) => void;
   onDelete?: (id: string) => void;
